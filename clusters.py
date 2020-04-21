@@ -1,3 +1,4 @@
+
 import warnings
 import pylab as pl
 import healpy as hp
@@ -10,7 +11,10 @@ from sklearn.cluster import AgglomerativeClustering
 import astropy.units as u
 import os
 from scipy.interpolate import interp1d
-from fgcluster import estimate_Stat_and_Sys_residuals,estimate_spectra
+
+
+from  .residuals  import estimate_Stat_and_Sys_residuals,estimate_spectra
+from .utils  import hellinger_distance
 import numpy as np
 from sklearn.metrics import (
         davies_bouldin_score,
@@ -18,58 +22,17 @@ from sklearn.metrics import (
         silhouette_score )
 
 
-def smooth_and_rotate_map (input_map ,lmax=None , fwhm=None , rot= None  ):
-    nside= hp.get_nside(input_map)
-    alm = hp.map2alm(
-            input_map, lmax=lmax, use_pixel_weights=True if nside > 16 else False)
-    if fwhm is not None:
-        hp.smoothalm(
-               alm, fwhm=fwhm.to_value(u.rad), verbose=False, inplace=True, pol=True
-            )
-    if rot is not None:
-        alm = rot.rotate_alm(alm )
-    smoothed_map = hp.alm2map(alm, nside=nside, verbose=False, pixwin=False)
-    if hasattr(input_map, "unit"):
-        smoothed_map <<= input_map.unit
-    return smoothed_map
-
-def plotclusters(labels,imap):
-    outm= pl.zeros_like(imap)
-    for i in range(labels.max()+1):
-        pixs=pl.where(labels==i)
-        outm[pixs]=imap[pixs].mean()
-
-    return outm
-
-def check_nside (nsideout , mapin):
-    nside2 =hp.get_nside(mapin)
-    if nside2 != nsideout :
-        print ("running ud_grade ")
-        return hp.ud_grade(nside_out=nsideout , map_in=mapin)
-    else:
-        return mapin
-
-def hellinger_distance(x,y ) :
-    #estimating hellinger distance from https://en.wikipedia.org/wiki/Hellinger_distance
-    mu1= x[0]; sigma1=x[1];
-    mu2= y[0]; sigma2=y[1] ;
-
-
-    BC = (pl.sqrt(2. *sigma1*sigma2/(sigma1**2 +sigma2**2))
-          * pl.exp(-1/4. *(mu1-mu2)**2/(sigma1**2 +sigma2**2)))
-
-    return pl.sqrt(1- BC )
 
 class ClusterData ():
     def estimate_haversine(self):
 
         self.haversine = DistanceMetric.get_metric('haversine')
         #prepare features  Coordinates
-        longi, lat= pl.deg2rad( hp.pix2ang(nside=self._nside ,ipix=pl.arange(self._npix), lonlat=True )  )
+        longi, lat= pl.deg2rad( hp.pix2ang(nside=self._nside ,ipix=pl.arange(hp.nside2npix(self._nside)), lonlat=True )  )
         mask =  pl.ma.masked_inside(longi, 0 , pl.pi ).mask
         longi [  mask] =  - longi [mask]
         longi [  pl.logical_not(mask) ] =  2* pl.pi - longi [pl.logical_not ( mask) ]
-        Theta= pl.array([ lat ,  longi ]).T
+        Theta= pl.array([ lat[self.galactic_mask] ,  longi[self.galactic_mask] ]).T
 
         angdist_matr =self.haversine.pairwise( Theta  )
         angdist_matr =pl.ma.fix_invalid(angdist_matr,  fill_value=pl.pi).data
@@ -110,6 +73,7 @@ class ClusterData ():
 
     def __init__(self, features,nfeatures,  nside=16,
                  include_haversine=False,
+                 galactic_mask=None,
                  affinity ='euclidean',
                  scaler =preprocessing.StandardScaler() ,
                 file_affinity ='', verbose=False , save_affinity=False,feature_weights =None ) :
@@ -120,6 +84,13 @@ class ClusterData ():
         """
         self._nside= nside
         self._nfeat = nfeatures
+        if galactic_mask is None :
+            self.galactic_mask = np.bool_(pl.ones_like (   features[0]  ))
+        else:
+            self.galactic_mask = galactic_mask
+        features[0]=  features[0][galactic_mask ]
+        features[1]=  features[1][galactic_mask ]
+
         if self._nfeat>1:
             assert features[0].shape[0] ==features[1].shape[0]
             self._npix=  features[0].shape[0]#hp.nside2npix(nside)
@@ -129,6 +100,7 @@ class ClusterData ():
             feature_weights =pl.ones(self._nfeat)
         self.verbose=verbose
         self._X = pl.zeros((self._npix, self._nfeat ))
+
         if self._nfeat ==1 : features= [ features]
         for i, x in zip (range(self._nfeat ), features ) :
             self._X [:,i] = x
@@ -204,12 +176,13 @@ class ClusterData ():
 
         Krange = pl.arange(self.Kvals.min(), self.Kvals.max() )
         minval  = pl.argmin ( Vsv(Krange) - Vsv(Krange).min() )
+
         Kopt = Krange [minval ]
         return  Kopt
 
 
 
-    def minimize_residual_variances(self , **kwargs ) :
+    def minimize_residual_variances(self, **kwargs ) :
         """
         Syst. residuals behave as an underpartition measures, i.e. the larger is K the lower is  the residual( the more are patches  the better )
         stat. residuals behave as an overpartition measures, i.e. the larger is K the higher is the residuals (the lesser are the patches the worse, because you have less signal-to-noise in each patch)
@@ -221,7 +194,7 @@ class ClusterData ():
             if self.verbose  :print (f"Running with K={K} clusters")
             clusters = AgglomerativeClustering(n_clusters=K  ,affinity= 'precomputed', linkage='average')
             clusters.fit_predict(self._Affinity)
-            msys,mstat =estimate_Stat_and_Sys_residuals( clusters.labels_  ,
+            msys,mstat =estimate_Stat_and_Sys_residuals( clusters.labels_  ,galactic_binmask=self.galactic_mask,
                                         **kwargs)
             m1 = pl.ma.masked_equal(msys[1],hp.UNSEEN).mask
             m2 = pl.ma.masked_equal(mstat[1] ,hp.UNSEEN) .mask
@@ -232,7 +205,7 @@ class ClusterData ():
 
         #We have to match  Vo and Vu, we rescale Vo so that it ranges as Vu
         min_max_scaler = preprocessing.MinMaxScaler(feature_range=(self.Vu.min() ,self.Vu.max() ))
-
+        print(self.Vu, self.Vo)
         self.Vu = min_max_scaler.fit_transform( ( self.Vu)).reshape( nvals)
         self.Vo = min_max_scaler.fit_transform( ( self.Vo) ) .reshape( nvals)
         Vsv = interp1d(self.Kvals, 1/ pl.sqrt(self.Vu * self.Vo).T, kind='slinear')
@@ -334,6 +307,7 @@ class ClusterData ():
 
 
     def __call__ (self, K=None , nvals=10, Kmax= 50,Kmin=2, minimize = 'partition' , **kwargs ):
+
         if K is not None :
             if self.verbose :print(f"Running Hierarchical clustering to find K={K} clusters.")
             self.clusters = AgglomerativeClustering(n_clusters=K  ,affinity= 'precomputed', linkage='average')
@@ -366,6 +340,7 @@ class ClusterData ():
         if self.verbose : print(f"Optimal number of clusters: K_opt ={self.K_optim}")
         self.clusters = AgglomerativeClustering(n_clusters=self.K_optim  ,affinity= 'precomputed', linkage='average')
         self.clusters.fit_predict(self._Affinity)
+
 
 
     def maximize_silhouette_score (self):
