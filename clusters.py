@@ -25,7 +25,7 @@ from sklearn.metrics import (
 
 class ClusterData ():
     def estimate_haversine(self):
-
+        print("Estimating Spatial locality with Haversine distance .")
         self.haversine = DistanceMetric.get_metric('haversine')
         #prepare features  Coordinates
         longi, lat= pl.deg2rad( hp.pix2ang(nside=self._nside ,ipix=pl.arange(hp.nside2npix(self._nside)), lonlat=True )  )
@@ -204,11 +204,12 @@ class ClusterData ():
             self.Vo[j ], self.Vu[j]=var_stat, var_sys
 
         #We have to match  Vo and Vu, we rescale Vo so that it ranges as Vu
-        min_max_scaler = preprocessing.MinMaxScaler(feature_range=(self.Vu.min() ,self.Vu.max() ))
-        print(self.Vu, self.Vo)
-        self.Vu = min_max_scaler.fit_transform( ( self.Vu)).reshape( nvals)
-        self.Vo = min_max_scaler.fit_transform( ( self.Vo) ) .reshape( nvals)
-        Vsv = interp1d(self.Kvals, 1/ pl.sqrt(self.Vu * self.Vo).T, kind='slinear')
+
+        #min_max_scaler = preprocessing.MinMaxScaler(feature_range=(self.Vu.min() ,self.Vu.max() ))
+        #self.Vu = min_max_scaler.fit_transform( ( self.Vu)).reshape( nvals)
+        #self.Vo = min_max_scaler.fit_transform( ( self.Vo) ) .reshape( nvals)
+
+        Vsv = interp1d(self.Kvals,  pl.sqrt(self.Vu**2 +  self.Vo**2 ).T, kind='slinear')
         Krange = pl.arange(self.Kvals.min(), self.Kvals.max() )
         minval  = pl.argmin ( Vsv(Krange) - Vsv(Krange).min() )
         Kopt = Krange [minval ]

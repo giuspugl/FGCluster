@@ -29,7 +29,7 @@ def fitting_parameters(string, nside , idpatches  ):
 
     elif string=='Td':
         sky =get_sky(nside, 's0d1')
-        sky.components[1].mbb_index  = 1.6
+        sky.components[1].mbb_index  = 1.6 *sky.components[1].mbb_index.unit 
 
         param  = ( sky.components[1] .mbb_temperature  ).value
         patchlist =[np.zeros( npix, dtype=np.int_ ),np.zeros( npix, dtype=np.int_ ), np.int_( idpatches ) ]
@@ -52,7 +52,7 @@ def estimate_Stat_and_Sys_residuals( idpatches, galactic_binmask ,
     sens_I_LB =np.array([25.60283688, 13.90070922, 14.32624113,  8.0141844 ,  7.30496454,
          5.95744681,  4.96453901,  4.11347518,  3.33333333,  4.96453901,
          4.11347518,  5.67375887,  6.45390071,  8.08510638, 13.90070922])
-    sky =get_sky(nside, 'd1s1')
+    skyconst =get_sky(nside, 'd0s0')
 
 
     instrument = get_instrument(instrument_conf)
@@ -62,13 +62,13 @@ def estimate_Stat_and_Sys_residuals( idpatches, galactic_binmask ,
 
     patches[galactic_binmask] = np.int_(idpatches)+1
 
-    sky , patchlist =  fitting_parameters(parameter_string, nside , patches )
+    skyvar , patchlist =  fitting_parameters(parameter_string, nside , patches )
 
     np.random.seed(seed= randomseed )
 
-    signalvar  = get_observation(instrument, sky, noise=False   )
+    signalvar  = get_observation(instrument, skyvar , noise=False   )
 
-    signoisemaps =  get_observation(instrument, sky, noise=True   )
+    signoisemaps =  get_observation(instrument, skyconst , noise=True   )
 
 
     signalvar [:,:,~galactic_binmask]= hp.UNSEEN
