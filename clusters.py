@@ -25,7 +25,7 @@ from sklearn.metrics import (
 
 class ClusterData ():
     def estimate_haversine(self):
-        print("Estimating Spatial locality with Haversine distance .")
+        if self.verbose : print("Estimating Spatial locality with Haversine distance .")
         self.haversine = DistanceMetric.get_metric('haversine')
         #prepare features  Coordinates
         longi, lat= pl.deg2rad( hp.pix2ang(nside=self._nside ,ipix=pl.arange(hp.nside2npix(self._nside)), lonlat=True )  )
@@ -58,6 +58,7 @@ class ClusterData ():
                                         features, needed >1 features")
             try:
                 self._distance_matr =pl.load(file_affinity)
+                if self.verbose:  print(f"Loading affinity from {file_affinity}")
                 return
             except FileNotFoundError:
                 warnings.warn ("Warning: Recomputing the Hellinger distance, this might take a while... ")
@@ -150,7 +151,7 @@ class ClusterData ():
         nvals= len(self.Kvals)
         for j, K  in enumerate( self.Kvals )  :
             if self.verbose  :print (f"Running with K={K} clusters")
-            clusters = AgglomerativeClustering(n_clusters=K  ,affinity= 'precomputed', linkage='average')
+            clusters = AgglomerativeClustering(n_clusters=K  ,affinity= 'precomputed', linkage='average',connectivity=self.connectivity )
             clusters.fit_predict(self._Affinity)
             mu, MD = self.intracluster_distance(K,  clusters.labels_)
             dmu =self._metric.pairwise (mu[:,:self._nfeat] )
@@ -192,7 +193,7 @@ class ClusterData ():
         nvals= len(self.Kvals)
         for j, K  in enumerate( self.Kvals )  :
             if self.verbose  :print (f"Running with K={K} clusters")
-            clusters = AgglomerativeClustering(n_clusters=K  ,affinity= 'precomputed', linkage='average')
+            clusters = AgglomerativeClustering(n_clusters=K  ,affinity= 'precomputed', linkage='average',connectivity=self.connectivity)
             clusters.fit_predict(self._Affinity)
             msys,mstat =estimate_Stat_and_Sys_residuals( clusters.labels_  ,galactic_binmask=self.galactic_mask,
                                         **kwargs)
@@ -204,10 +205,9 @@ class ClusterData ():
             self.Vo[j ], self.Vu[j]=var_stat, var_sys
 
         #We have to match  Vo and Vu, we rescale Vo so that it ranges as Vu
-
-        #min_max_scaler = preprocessing.MinMaxScaler(feature_range=(self.Vu.min() ,self.Vu.max() ))
-        #self.Vu = min_max_scaler.fit_transform( ( self.Vu)).reshape( nvals)
-        #self.Vo = min_max_scaler.fit_transform( ( self.Vo) ) .reshape( nvals)
+        min_max_scaler = preprocessing.MinMaxScaler(feature_range=(self.Vu.min() ,self.Vu.max() ))
+        self.Vu = min_max_scaler.fit_transform( ( self.Vu)).reshape( nvals)
+        self.Vo = min_max_scaler.fit_transform( ( self.Vo) ) .reshape( nvals)
 
         Vsv = interp1d(self.Kvals,  pl.sqrt(self.Vu**2 +  self.Vo**2 ).T, kind='slinear')
         Krange = pl.arange(self.Kvals.min(), self.Kvals.max() )
@@ -260,7 +260,7 @@ class ClusterData ():
         p = self._nfeat
         for j, K in enumerate(self.Kvals) :
             if self.verbose  :print (f"Running with K={K} clusters")
-            self.clusters = AgglomerativeClustering(n_clusters=K  ,affinity= 'precomputed', linkage='average')
+            self.clusters = AgglomerativeClustering(n_clusters=K  ,affinity= 'precomputed', linkage='average',connectivity=self.connectivity)
             self.clusters.fit_predict(self._Affinity)
             #estimate WCSS for the samples
             W = self.get_WCSS( K, self.clusters.labels_ , self._distance_matr)
@@ -269,7 +269,7 @@ class ClusterData ():
             ref_W=pl.zeros(nrefs)
 
             for i in range(nrefs):
-                ref_clusters = AgglomerativeClustering(n_clusters=K  ,affinity= 'precomputed', linkage='average')
+                ref_clusters = AgglomerativeClustering(n_clusters=K  ,affinity= 'precomputed', linkage='average',connectivity=self.connectivity)
                 ref_clusters .fit_predict(ref_Affinity[i]  )
                 ref_W[i] = self.get_WCSS( K, ref_clusters.labels_ , Dref[i]  )
 
@@ -290,7 +290,7 @@ class ClusterData ():
         for j, K in enumerate(self.Kvals) :
             if self.verbose  :print (f"Running with K={K} clusters")
 
-            self.clusters = AgglomerativeClustering(n_clusters=K  ,affinity= 'precomputed', linkage='average')
+            self.clusters = AgglomerativeClustering(n_clusters=K  ,affinity= 'precomputed', linkage='average',connectivity=self.connectivity)
             self.clusters.fit_predict(self._Affinity)
             #estimate WCSS for the samples
             self.W [j] =self.get_WCSS( K, self.clusters.labels_ , self._distance_matr)
@@ -307,11 +307,13 @@ class ClusterData ():
         return pl.int_ ( self.KL[0,maxindex] )
 
 
-    def __call__ (self, K=None , nvals=10, Kmax= 50,Kmin=2, minimize = 'partition' , **kwargs ):
-
+    def __call__ (self, K=None , nvals=10, Kmax= 50,Kmin=2, minimize = 'partition',connectivity=None , **kwargs ):
+        
+        self.connectivity=connectivity
+                
         if K is not None :
             if self.verbose :print(f"Running Hierarchical clustering to find K={K} clusters.")
-            self.clusters = AgglomerativeClustering(n_clusters=K  ,affinity= 'precomputed', linkage='average')
+            self.clusters = AgglomerativeClustering(n_clusters=K  ,affinity= 'precomputed', linkage='average', connectivity=self.connectivity )
             self.clusters.fit_predict(self._Affinity)
             return
 
@@ -339,7 +341,7 @@ class ClusterData ():
             self.K_optim = self.maximize_calinski_harabasz_score ()
 
         if self.verbose : print(f"Optimal number of clusters: K_opt ={self.K_optim}")
-        self.clusters = AgglomerativeClustering(n_clusters=self.K_optim  ,affinity= 'precomputed', linkage='average')
+        self.clusters = AgglomerativeClustering(n_clusters=self.K_optim  ,affinity= 'precomputed', linkage='average',connectivity=self.connectivity)
         self.clusters.fit_predict(self._Affinity)
 
 
@@ -348,7 +350,7 @@ class ClusterData ():
         self.silhouette = pl.zeros(len(self.Kvals))
         for j, K  in enumerate( self.Kvals )  :
                 if self.verbose  :print (f"Running with K={K} clusters")
-                clusters = AgglomerativeClustering(n_clusters=K  ,affinity= 'precomputed', linkage='average')
+                clusters = AgglomerativeClustering(n_clusters=K  ,affinity= 'precomputed', linkage='average',connectivity=self.connectivity)
                 clusters.fit_predict(self._Affinity)
                 self.silhouette[j] =  silhouette_score(X= self._distance_matr,
                                                        labels=clusters.labels_, metric='precomputed')
@@ -359,7 +361,7 @@ class ClusterData ():
         self.CH = pl.zeros(len(self.Kvals))
         for j, K  in enumerate( self.Kvals )  :
                 if self.verbose  :print (f"Running with K={K} clusters")
-                clusters = AgglomerativeClustering(n_clusters=K  ,affinity= 'precomputed', linkage='average')
+                clusters = AgglomerativeClustering(n_clusters=K  ,affinity= 'precomputed', linkage='average',connectivity=self.connectivity)
                 clusters.fit_predict(self._Affinity)
                 self.CH[j] =  calinski_harabasz_score (X= self._X , labels=clusters.labels_ )
         return pl.int_ ( self.Kvals[ self.CH.argmax() ] )
@@ -368,7 +370,7 @@ class ClusterData ():
         self.DB = pl.zeros(len(self.Kvals))
         for j, K  in enumerate( self.Kvals )  :
                 if self.verbose  :print (f"Running with K={K} clusters")
-                clusters = AgglomerativeClustering(n_clusters=K  ,affinity= 'precomputed', linkage='average')
+                clusters = AgglomerativeClustering(n_clusters=K  ,affinity= 'precomputed', linkage='average',connectivity=self.connectivity)
                 clusters.fit_predict(self._Affinity)
                 self.DB[j] =  davies_bouldin_score(X= self._X , labels=clusters.labels_ )
         return pl.int_ ( self.Kvals[ self.DB.argmin() ] )
