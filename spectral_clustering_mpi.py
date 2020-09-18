@@ -3,20 +3,11 @@ import pylab as pl
 import numpy as np
 
 from scipy.stats import norm , ks_2samp
-from mpi4py import MPI
 from scipy import sparse
 from scipy.special import legendre
 
-import pysm
-import pysm.units as u
+from mpi4py import MPI
 
-from fgbuster import get_instrument, get_sky, get_observation  # Predefined instrumental and sky-creation configurations
-import fgbuster.separation_recipes as sr
-from fgbuster.visualization import corner_norm
-from fgbuster.observation_helpers import get_instrument, get_sky
-# Imports needed for component separation
-from fgbuster import (CMB, Dust, Synchrotron,  # sky-fitting model
-                      MixingMatrix)  # separation routine
 import warnings
 warnings.filterwarnings("ignore")
 
@@ -187,6 +178,8 @@ def estimate_Laplacian_matrix (W , kind ='unnormalized'):
         Dinv2s   = sparse.spdiags(Dinv2, diags=0, m= W.shape[0],n=W.shape[1])
         Lsym= Dinv2s .dot(L.dot(Dinv2s))
         return Lsym
+    else:
+        raise SyntaxError ( ' "kind" can   be one among :  "unnormalized" ,  "normalized" , "symmetric"  ')
 
 def estimate_Ritz_eigenpairs (L,n_eig = 600, tolerance=1e-12 ):
     eval,evec = sparse.linalg.eigsh(L, k=n_eig ,   return_eigenvectors=True, which="SM",tol=tolerance    )
@@ -211,66 +204,3 @@ def build_distance_matrix_from_eigenvectors(W ,comm  ):
     D=  np.zeros_like(Dloc )
     comm.Reduce(Dloc , D, op=MPI.SUM)
     return D
-
-
-def main( ):
-    comm    = MPI.COMM_WORLD
-    rank    = comm.Get_rank()
-    nprocs  = comm.Get_size()
-    nside=8
-    X=np.ones( hp.nside2npix(nside )) #np.random.uniform(size= hp.nside2npix(nside ))
-    sigmaX=np.ones_like(X)*.2
-    import time
-    s =time.perf_counter ()
-
-    A  = build_adjacency_from_nearest_neighbours(  nside=nside , neighbour_order=0,
-                                comm=comm,  )
-    e = time.perf_counter ()
-    if rank==0 :
-        #pl.imshow(A  )
-        #pl.show()
-        print(f"build_adjacency_from_nearest_neighbours, execution time {e-s }sec")
-
-    s =time.perf_counter ()
-
-    A  = build_adjacency_from_nearest_neighbours(  nside=nside , neighbour_order=0,
-                                    comm=comm,
-                                    KS_weighted=True, X=X, sigmaX=X  )
-    e = time.perf_counter ()
-    if rank==0 :
-        print(f"build_adjacency_from_nearest_neighbours (weighted), execution time {e-s }sec")
-    s =time.perf_counter ()
-    A = build_adjacency_from_heat_kernel (nside, comm  )
-    e = time.perf_counter ()
-
-    if rank==0 :
-        #pl.imshow(A  )
-        #pl.show()
-        print(f"build_adjacency_from_heat_kernel, execution time {e-s }sec")
-
-
-    L = estimate_Laplacian_matrix(A )
-
-    #if rank==0 :
-        #pl.imshow(L.todense()  )
-        #hp.mollview(L.toarray()[100,:],  title="L", cmap='coolwarm', min=-17,max=17,);pl.show()
-    s =time.perf_counter ()
-    l, W = estimate_Ritz_eigenpairs (L, n_eig = 6 )
-    e = time.perf_counter ()
-    if rank==0 :
-        pl.plot(l, 'o');pl.show()
-        #hp.mollview(W[:,0]);pl.show()
-        print(f"estimate_Ritz_eigenpairs, execution time {e-s }sec")
-
-    #we don't consider the smallest eigenvectors since it's the constant vector
-    s=time.perf_counter()
-    E = build_distance_matrix_from_eigenvectors(W[:,1:] ,comm=comm )
-    e = time.perf_counter ()
-    if rank==0 :
-        pl.imshow(E);pl.colorbar();pl.show()
-        print(f"build_distance_matrix_from_eigenvectors, execution time {e-s }sec")
-
-    comm.Disconnect
-
-    return
-main ()
