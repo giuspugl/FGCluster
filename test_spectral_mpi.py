@@ -7,6 +7,7 @@ from mpi4py import MPI
 
 from spectral_clustering_mpi import ( build_adjacency_from_heat_kernel,
                                     build_adjacency_from_nearest_neighbours,
+                                    build_adjacency_from_KS_distance,
                                     estimate_Laplacian_matrix,
                                     estimate_Ritz_eigenpairs,
                                     build_distance_matrix_from_eigenvectors, KS_distance)
@@ -14,21 +15,9 @@ from spectral_clustering_mpi import ( build_adjacency_from_heat_kernel,
 
 import os
 
-def test_spectral_clustering( ):
-    workdir =os. getcwd()
-
-    comm    = MPI.COMM_WORLD
-    rank    = comm.Get_rank()
-    nprocs  = comm.Get_size()
+def test_spectral_clustering( comm,workdir ):
+    rank =comm.Get_rank()
     nside=2
-    randseed = 1234567
-    np.random.seed(randseed)
-
-    X= np.random.uniform(size= hp.nside2npix(nside ))
-    sigmaX=np.ones_like(X)*.2
-    if rank ==0 :
-        assert  (KS_distance((0.3,1.3),(0,1)) ==0.01  )
-
     s =time.perf_counter ()
 
     Ann   = build_adjacency_from_nearest_neighbours(  nside=nside , neighbour_order=0,
@@ -39,17 +28,7 @@ def test_spectral_clustering( ):
         assert np.allclose(pl.load(f'{workdir}/test/adjacency_NN.npy'), Ann, atol=1e-5)
         print(f"build_adjacency_from_nearest_neighbours, execution time {e-s }sec")
 
-    s =time.perf_counter ()
 
-    Ann_w  = build_adjacency_from_nearest_neighbours(  nside=nside , neighbour_order=0,
-                                    comm=comm,
-                                    KS_weighted=True, X=X, sigmaX=X  )
-
-
-    e = time.perf_counter ()
-    if rank==0 :
-        assert np.allclose(pl.load(f'{workdir}/test/adjacency_wNN.npy'), Ann_w, atol=1e-5)
-        print(f"build_adjacency_from_nearest_neighbours (weighted), execution time {e-s }sec")
     s =time.perf_counter ()
     A = build_adjacency_from_heat_kernel (nside, comm  )
     e = time.perf_counter ()
@@ -72,10 +51,7 @@ def test_spectral_clustering( ):
     l, W = estimate_Ritz_eigenpairs (L, n_eig = 6 )
     e = time.perf_counter ()
 
-
     if rank==0 :
-        assert np.allclose(np.load(f'{workdir}/test/eigenpairs.npz')['evals'], l )
-        assert np.allclose(np.load(f'{workdir}/test/eigenpairs.npz')['evecs'], W )
         print(f"estimate_Ritz_eigenpairs, execution time {e-s }sec")
 
     #we don't consider the smallest eigenvectors since it's the constant vector
@@ -88,7 +64,50 @@ def test_spectral_clustering( ):
         #pl.imshow(E);pl.colorbar();pl.show()
         print(f"build_distance_matrix_from_eigenvectors, execution time {e-s }sec")
 
-    comm.Disconnect
+def test_KS_distances(comm,workdir ):
+    rank =comm.Get_rank()
+
+    nside=2
+    randseed = 1234567
+    np.random.seed(randseed)
+    X= np.random.uniform(size= hp.nside2npix(nside ))
+    sigmaX=np.ones_like(X)*.2
+    if rank ==0 :
+        assert  (KS_distance((0.3,1.3),(0,1), ntests=50,nsamp=100) ==0.04514318340310804  )
 
 
-test_spectral_clustering ()
+    s =time.perf_counter ()
+    Ann_w  = build_adjacency_from_nearest_neighbours(  nside=nside , neighbour_order=0,
+                                        comm=comm,
+                                        KS_weighted=True, X=X, sigmaX=X  )
+    e = time.perf_counter ()
+    if rank==0 :
+        #pl.save(f'{workdir}/test/adjacency_wNN.npy',Ann_w)
+        assert np.allclose(pl.load(f'{workdir}/test/adjacency_wNN.npy'), Ann_w, atol=1e-5)
+        print(f"build_adjacency_from_nearest_neighbours (weighted), execution time {e-s }sec")
+
+    s =time.perf_counter ()
+    Q   = build_adjacency_from_KS_distance(  nside=nside , comm=comm,
+                                    X= X, sigmaX=sigmaX  )
+    e = time.perf_counter ()
+    if rank==0:
+        #pl.save(f'{workdir}/test/adjacency_KS.npy', Q)
+        assert np.allclose(pl.load(f'{workdir}/test/adjacency_KS.npy'), Q, atol=1e-5)
+        print(f"build_adjacency_from_KS_distance, execution time {e-s }sec")
+
+    s =time.perf_counter ()
+
+    A   = build_adjacency_from_heat_kernel(  nside=nside , comm=comm, KS_weighted=True ,
+                                                    Q=Q  ,alpha=.5)
+    e = time.perf_counter ()
+
+    if rank==0:
+        #pl.save(f'{workdir}/test/adjacency_weighted_heat.npy',A)
+        assert np.allclose(pl.load(f'{workdir}/test/adjacency_weighted_heat.npy'), A, atol=1e-5)
+        print(f"build_adjacency_from_heat_kernel (weighted), execution time {e-s }sec")
+
+comm    = MPI.COMM_WORLD
+workdir =os. getcwd()
+test_spectral_clustering (comm, workdir  )
+test_KS_distances(comm , workdir )
+comm.Disconnect
