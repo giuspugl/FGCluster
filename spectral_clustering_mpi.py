@@ -36,36 +36,21 @@ def get_neighbours(ipix,nside,  order ):
         return get_neighbours(ipix,nside,order-1 )
 
 
-def KS_distance(x,y) :
-    ## Source of the tabulated values  from
-    ## http://www.matf.bg.ac.rs/p/files/69-[Michael_J_Panik]_Advanced_Statistics_from_an_Elem(b-ok.xyz)-776-779.pdf
-    # We consider 95th quantile (alpha=0.05 )
+def KS_distance(x,y, ntests, nsamp  ) :
 
     mu1= x[0]; sigma1=x[1];
     mu2= y[0]; sigma2=y[1] ;
-    ntests =50
-    n=100
     D=[]
-    # We can repeat the KS test ntest times (it takes time) on two samples with same size n=m
+    # We  repeat the KS test ntest times (it takes time) on two samples with same size n=m
 
     for test in range(ntests):
-        rvs1 = norm.rvs(size=n, loc=mu1, scale=sigma1)
-        rvs2 = norm.rvs(size=n , loc=mu2, scale=sigma2 )
-        #D,pval =ks_2samp(rvs1, rvs2)
-        #D.append(ks_2samp(rvs1, rvs2)[0] )
+        rvs1 = norm.rvs(size=nsamp, loc=mu1, scale=sigma1)
+        rvs2 = norm.rvs(size=nsamp  , loc=mu2, scale=sigma2 )
         _, pval =ks_2samp(rvs1, rvs2)
         D.append(pval )
-    alpha= .05
-
     med = np.median(D)
-    #return med
-    dicmed ={}
-    if med < alpha :
-        return 1e-2
-    elif alpha<med<0.1:
-        return 0.1
-    else:
-        return 1.
+    return med
+
 
 def get_lmax(nside , stop_threshold ):
     pixscale =hp.nside2resol(nside=nside  )
@@ -79,8 +64,15 @@ def get_lmax(nside , stop_threshold ):
 def heat_kernel (Theta, l,sigma ):
     return (2*l+1 )/4./np.pi *np.exp(- sigma   *l *(l+1) ) *legendre(l )  (Theta)
 
+def MinMaxRescale(x,a=0,b=1):
+    """
+    Performs  a MinMax Rescaling on an array `x` to a generic range :math:`[a,b]`.
+    """
+    xresc = (b-a)*(x- x.min() )/(x.max() - x.min() ) +a
+    return xresc
 
-def build_adjacency_from_heat_kernel(nside,comm, stopping_threshold=1e-7 ):
+
+def build_adjacency_from_heat_kernel(nside,comm, stopping_threshold=1e-7,KS_weighted=False, Q=None ,alpha=0.5   ):
     if comm is None :
         rank =0
         nprocs = 1
@@ -90,7 +82,14 @@ def build_adjacency_from_heat_kernel(nside,comm, stopping_threshold=1e-7 ):
 
     p = np.arange(hp.nside2npix(nside))
     V =np.array(hp.pix2vec(ipix =p, nside=hp.get_nside(p))).T
-    scalprod=V.dot(V.T)
+    scalprod=MinMaxRescale( V.dot(V.T), a=-1,b=1)
+
+
+    if KS_weighted :
+        Theta =np.arccos(scalprod)
+        comm.Bcast(Q, root=0 )
+        Psi  = Theta   + alpha *(1 - Q) *np.pi /2
+        scalprod =  np.cos (Psi  )
 
     lmax, sigmabeam = get_lmax (nside, stopping_threshold )
 
@@ -101,9 +100,38 @@ def build_adjacency_from_heat_kernel(nside,comm, stopping_threshold=1e-7 ):
         Gloc += heat_kernel (scalprod, l, sigmabeam)
     G=    np.zeros_like(Gloc )
     comm.Reduce(Gloc , G , op=MPI.SUM)
+
     return G
 
-def build_adjacency_from_nearest_neighbours( nside,  comm,neighbour_order=1 ,KS_weighted=False, X=None ,sigmaX=None):
+def build_adjacency_from_KS_distance( nside, comm, X,sigmaX , ntests=50,nresample=100  ):
+    if comm is None :
+        rank =0
+        nprocs = 1
+    else :
+        rank =comm.Get_rank()
+        nprocs  = comm.Get_size()
+
+    npix = hp.nside2npix(nside)
+    Indices = np.array (np.triu_indices(npix ,1) )
+    Qloc = np.zeros( (npix,npix ))
+    start,stop= split_data_among_processors(size= Indices[0].size  ,rank= rank, nprocs=nprocs  )
+
+    for i,j  in   (Indices[:,start:stop] .T) :
+        X_i= (X[i], sigmaX[i])
+        X_j= (X[j], sigmaX[j])
+        q=KS_distance(x=X_i,y=X_j , ntests=ntests, nsamp=nresample )
+        Qloc[i,j] = q
+        Qloc[j,i] =q
+
+    Q   =  np.zeros_like(Qloc)
+    comm.Reduce(Qloc , Q  , op=MPI.SUM)
+
+    return MinMaxRescale(Q, a=0, b=1 )
+
+
+
+def build_adjacency_from_nearest_neighbours( nside,  comm,neighbour_order=1 ,KS_weighted=False,
+                                                    X=None ,sigmaX=None, ntests=50,nresample=100 ):
 
     if comm is None :
         rank =0
@@ -148,12 +176,14 @@ def build_adjacency_from_nearest_neighbours( nside,  comm,neighbour_order=1 ,KS_
 
             X_i= (X[i], sigmaX[i])
             X_j= (X[j], sigmaX[j])
-            q=KS_distance(x=X_i,y=X_j )
+            q=KS_distance(x=X_i,y=X_j,  ntests=ntests, nsamp=nresample )
             Dweighted_local[i,j]= q
             Dweighted_local[j,i]=Dweighted_local[i,j]
         Dweighted =  np.zeros_like(Dweighted_local)
         comm.Reduce(Dweighted_local , Dweighted , op=MPI.SUM)
-        return Dweighted
+        ## we define  the KS distance   as a sin (Qij *pi/2 ) , with Qij the quantile of KS test
+
+        return np.sin(Dweighted*np.pi/2)
 
 def estimate_Laplacian_matrix (W , kind ='unnormalized'):
 
