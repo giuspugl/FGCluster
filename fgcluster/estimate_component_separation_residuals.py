@@ -29,7 +29,7 @@ def fitting_parameters(string, nside , idpatches  ):
 
     elif string=='Td':
         sky =get_sky(nside, 's0d1')
-        sky.components[1].mbb_index  = 1.6 *sky.components[1].mbb_index.unit 
+        sky.components[1].mbb_index  = 1.6 *sky.components[1].mbb_index.unit
 
         param  = ( sky.components[1] .mbb_temperature  ).value
         patchlist =[np.zeros( npix, dtype=np.int_ ),np.zeros( npix, dtype=np.int_ ), np.int_( idpatches ) ]

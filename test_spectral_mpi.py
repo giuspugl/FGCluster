@@ -5,16 +5,22 @@ import numpy as np
 import time
 from mpi4py import MPI
 
-from spectral_clustering_mpi import ( build_adjacency_from_heat_kernel,
+from fgcluster.spectral_clustering_mpi import ( build_adjacency_from_heat_kernel,
                                     build_adjacency_from_nearest_neighbours,
                                     build_adjacency_from_KS_distance,
                                     estimate_Laplacian_matrix,
-                                    estimate_Ritz_eigenpairs,
+                                    estimate_Ritz_eigenpairs,from_ell_to_index,from_index_to_ell,
                                     build_distance_matrix_from_eigenvectors, KS_distance)
 
 
 import os
 
+def test_utils () :
+    l =200
+    l1,l2= from_ell_to_index(l )
+
+    ell = (from_index_to_ell(.5*(l1+l2)))
+    assert l ==ell
 def test_spectral_clustering( comm,workdir ):
     rank =comm.Get_rank()
     nside=2
@@ -110,4 +116,5 @@ comm    = MPI.COMM_WORLD
 workdir =os. getcwd()
 test_spectral_clustering (comm, workdir  )
 test_KS_distances(comm , workdir )
+test_utils()
 comm.Disconnect

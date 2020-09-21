@@ -12,8 +12,26 @@ import warnings
 warnings.filterwarnings("ignore")
 
 
+def from_ell_to_index(ell ):
+    """
+    Returns the range of column values assuming  a matrix with columns ordered
+    with the m multipole , m ranging from -ell to +ell
+    """
+    return ell**2 , ell**2 +2*ell  +1
+def from_index_to_ell(index ):
+    """
+    given an index in the matrix with columns ordered
+    with the m multipole, returns the  ell multipole
+    """
+    ell =np.floor(np.sqrt(index))
+    return ell
+
 
 def split_data_among_processors(size ,rank , nprocs ):
+    """
+    Split in a load-balanced way the size of an array equally among the processes
+
+    """
     localsize = np.int_(size   /nprocs)
     remainder = size % nprocs
 
@@ -29,12 +47,17 @@ def split_data_among_processors(size ,rank , nprocs ):
 
 
 def get_neighbours(ipix,nside,  order ):
+    """
+    Given a pixel index in the Healpix pixelization and the nside parameter, estimated
+    the indices of nearest neighbour pixels. The larger is   `order`,
+     the farther neighbours are included.
+    """
+
     if order==0:
         return np.unique(hp.get_all_neighbours(theta=ipix,nside= nside  ))
     else:
         ipix =   np.unique(hp.get_all_neighbours(theta=ipix,nside= nside ) )
         return get_neighbours(ipix,nside,order-1 )
-
 
 def KS_distance(x,y, ntests, nsamp  ) :
 

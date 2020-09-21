@@ -13,7 +13,7 @@ import os
 from scipy.interpolate import interp1d
 
 
-from  .residuals  import estimate_Stat_and_Sys_residuals,estimate_spectra
+from  .estimate_component_separation_residuals  import estimate_Stat_and_Sys_residuals,estimate_spectra
 from .utils  import hellinger_distance
 import numpy as np
 from sklearn.metrics import (
@@ -308,9 +308,9 @@ class ClusterData ():
 
 
     def __call__ (self, K=None , nvals=10, Kmax= 50,Kmin=2, minimize = 'partition',connectivity=None , **kwargs ):
-        
+
         self.connectivity=connectivity
-                
+
         if K is not None :
             if self.verbose :print(f"Running Hierarchical clustering to find K={K} clusters.")
             self.clusters = AgglomerativeClustering(n_clusters=K  ,affinity= 'precomputed', linkage='average', connectivity=self.connectivity )
