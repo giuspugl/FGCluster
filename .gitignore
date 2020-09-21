@@ -1,13 +1,16 @@
-# Byte-compiled / optimized / DLL files
-__pycache__/
-*.py[cod]
-*$py.class
+*.pyc
+doc/*
+*.png
+*.pdf
+.ipynb_checkpoints/
+*.npy
+*.ipynb
+test/*
 
-# C extensions
-*.so
 
-# Distribution / packaging
+#Distribution / packaging
 .Python
+env/
 build/
 develop-eggs/
 dist/
@@ -19,17 +22,6 @@ lib64/
 parts/
 sdist/
 var/
-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
-MANIFEST
-*.DS_store
-*.ipynb_checkpoints
-
-# PyInstaller
-#  Usually these files are written by a python script from a template
-#  before PyInstaller builds the exe, so as to inject date/other infos into it.
-*.manifest
-*.spec
-
