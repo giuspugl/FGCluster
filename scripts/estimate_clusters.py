@@ -17,11 +17,11 @@ from fgbuster import (CMB, Dust, Synchrotron,  # sky-fitting model
                       MixingMatrix)  # separation routine
 
 from fgcluster import (
-     residuals as res ,
+     estimate_component_separation_residuals as res ,
      utils as cu  )
 
-from fgcluster.clusters  import ClusterData
-from fgcluster.residuals import estimate_Stat_and_Sys_residuals, estimate_spectra
+from fgcluster.agglomerative_clustering  import ClusterData
+from fgcluster.estimate_component_separation_residuals import estimate_Stat_and_Sys_residuals, estimate_spectra
 
 import warnings
 warnings.filterwarnings("ignore")
