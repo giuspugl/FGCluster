@@ -5,6 +5,7 @@ import numpy as np
 from scipy.stats import norm , ks_2samp
 from scipy import sparse
 from scipy.special import legendre
+from sklearn.metrics import pairwise_distances
 
 from mpi4py import MPI
 
@@ -59,7 +60,7 @@ def get_neighbours(ipix,nside,  order ):
         ipix =   np.unique(hp.get_all_neighbours(theta=ipix,nside= nside ) )
         return get_neighbours(ipix,nside,order-1 )
 
-def KS_distance(x,y, ntests, nsamp  ) :
+def kolmogorov_smirnov_distance(x,y, ntests, nsamp  ) :
 
     mu1= x[0]; sigma1=x[1];
     mu2= y[0]; sigma2=y[1] ;
@@ -87,7 +88,7 @@ def get_lmax(nside , stop_threshold ):
 def heat_kernel (Theta, l,sigma ):
     return (2*l+1 )/4./np.pi *np.exp(- sigma   *l *(l+1) ) *legendre(l )  (Theta)
 
-def MinMaxRescale(x,a=0,b=1):
+def minmaxrescale(x,a=0,b=1):
     """
     Performs  a MinMax Rescaling on an array `x` to a generic range :math:`[a,b]`.
     """
@@ -105,7 +106,7 @@ def build_adjacency_from_heat_kernel(nside,comm, stopping_threshold=1e-7,KS_weig
 
     p = np.arange(hp.nside2npix(nside))
     V =np.array(hp.pix2vec(ipix =p, nside=hp.get_nside(p))).T
-    scalprod=MinMaxRescale( V.dot(V.T), a=-1,b=1)
+    scalprod=minmaxrescale( V.dot(V.T), a=-1,b=1)
 
 
     if KS_weighted :
@@ -142,14 +143,14 @@ def build_adjacency_from_KS_distance( nside, comm, X,sigmaX , ntests=50,nresampl
     for i,j  in   (Indices[:,start:stop] .T) :
         X_i= (X[i], sigmaX[i])
         X_j= (X[j], sigmaX[j])
-        q=KS_distance(x=X_i,y=X_j , ntests=ntests, nsamp=nresample )
+        q=kolmogorov_smirnov_distance(x=X_i,y=X_j , ntests=ntests, nsamp=nresample )
         Qloc[i,j] = q
         Qloc[j,i] =q
 
     Q   =  np.zeros_like(Qloc)
     comm.Reduce(Qloc , Q  , op=MPI.SUM)
 
-    return MinMaxRescale(Q, a=0, b=1 )
+    return minmaxrescale(Q, a=0, b=1 )
 
 
 
@@ -199,7 +200,7 @@ def build_adjacency_from_nearest_neighbours( nside,  comm,neighbour_order=1 ,KS_
 
             X_i= (X[i], sigmaX[i])
             X_j= (X[j], sigmaX[j])
-            q=KS_distance(x=X_i,y=X_j,  ntests=ntests, nsamp=nresample )
+            q=kolmogorov_smirnov_distance(x=X_i,y=X_j,  ntests=ntests, nsamp=nresample )
             Dweighted_local[i,j]= q
             Dweighted_local[j,i]=Dweighted_local[i,j]
         Dweighted =  np.zeros_like(Dweighted_local)
@@ -234,9 +235,29 @@ def estimate_Laplacian_matrix (W , kind ='unnormalized'):
     else:
         raise SyntaxError ( ' "kind" can   be one among :  "unnormalized" ,  "normalized" , "symmetric"  ')
 
-def estimate_Ritz_eigenpairs (L,n_eig = 600, tolerance=1e-12 ):
+def estimate_Ritz_eigenpairs (L,n_eig, tolerance=1e-12 ):
     eval,evec = sparse.linalg.eigsh(L, k=n_eig ,   return_eigenvectors=True, which="SM",tol=tolerance    )
     return eval,evec
+
+def get_under_over_partition_measures ( K, labels, W ):
+    """
+    See definitions in sect. 7.2 of
+    http://scholar.google.com/scholar?hl=en&btnG=Search&q=intitle:Chapter+15+-+Clustering+Methods#4
+    """
+    mu = pl.zeros( K*W.shape[1]).reshape(K,W.shape[1])
+    mean_intra_cluster_D  = pl.zeros( K)
+    for k in range(K):
+        ck =pl.where(labels == k )[0]
+        Xk =W[ck,:  ]
+        mu[k] = Xk.mean(axis=0)
+        Nk = len(ck)
+        E= pairwise_distances(X=Xk , Y=mu[k].reshape( 1,-1) , metric='euclidean'  )
+        mean_intra_cluster_D [k]=E.sum () /Nk
+    inter_cluster_D = pairwise_distances(mu, metric='euclidean'  )
+    pl.fill_diagonal(inter_cluster_D, pl.inf)
+    under  = mean_intra_cluster_D.sum() /K
+    over  = K / inter_cluster_D.min()
+    return under   , over
 
 def build_distance_matrix_from_eigenvectors(W ,comm  ):
     rank =comm.Get_rank()

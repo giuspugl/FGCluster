@@ -5,7 +5,7 @@ from fgbuster.separation_recipes import  adaptive_comp_sep
 
 import healpy as hp
 import numpy as np
-import pysm
+import pysm3
 
 
 from .utils import check_nside

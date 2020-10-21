@@ -10,7 +10,7 @@ from fgcluster.spectral_clustering_mpi import ( build_adjacency_from_heat_kernel
                                     build_adjacency_from_KS_distance,
                                     estimate_Laplacian_matrix,
                                     estimate_Ritz_eigenpairs,from_ell_to_index,from_index_to_ell,
-                                    build_distance_matrix_from_eigenvectors, KS_distance)
+                                    build_distance_matrix_from_eigenvectors, kolmogorov_smirnov_distance)
 
 
 import os
@@ -79,7 +79,7 @@ def test_KS_distances(comm,workdir ):
     X= np.random.uniform(size= hp.nside2npix(nside ))
     sigmaX=np.ones_like(X)*.2
     if rank ==0 :
-        assert  (KS_distance((0.3,1.3),(0,1), ntests=50,nsamp=100) ==0.04514318340310804  )
+        assert  (kolmogorov_smirnov_distance((0.3,1.3),(0,1), ntests=50,nsamp=100) ==0.04514318340310804  )
 
 
     s =time.perf_counter ()
