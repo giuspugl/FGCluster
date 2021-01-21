@@ -9,7 +9,7 @@ import healpy as hp
 from fgbuster import get_instrument, get_sky, get_observation  # Predefined instrumental and sky-creation configurations
 import fgbuster.separation_recipes as sr
 from fgbuster.visualization import corner_norm
-from fgbuster.observation_helpers import get_instrument, get_sky
+from fgbuster.observation_helpers import get_instrument, get_sky,get_noise_realization
 # Imports needed for component separation
 from fgbuster import (CMB, Dust, Synchrotron,  # sky-fitting model
                       MixingMatrix)  # separation routine
@@ -20,7 +20,6 @@ import warnings
 warnings.filterwarnings("ignore")
 import argparse
 
-from mpi4py import MPI
 import os
 
 def main(args) :
@@ -29,9 +28,6 @@ def main(args) :
     except  FileExistsError:
         print (f"Warning: Overwriting files in {args.output_dir}")
 
-    comm    = MPI.COMM_WORLD
-    rank    = comm.Get_rank()
-    nprocs  = comm.Get_size()
     v={}
     #v['v27'] = np.array([39.76, 25.76, 20.69, 12.72, 10.39, 8.95, 6.43, 4.3, 4.43, 4.86, 5.44, 9.72, 12.91, 19.07, 43.53])
 
@@ -47,28 +43,37 @@ def main(args) :
 
     ones= pl.ma.masked_greater(Galmask,0 ).mask
     fsky = (Galmask[ones].shape[0] / Galmask.shape[0])
-    if rank==0 :
-        print(f' Component Separation on fsky =   {fsky:.2f}%   ')
+    if  args.signalonly  :
 
-        sky =get_sky(nside, 'd1s1')
+        model ='d1s1'
+        sky =get_sky(nside, model )
 
-        #sky.components[0].mbb_temperature.value[:] = hp.smoothing(
-        #    sky.components[0].mbb_temperature.value, fwhm=np.radians(2)
-        #    )
-        #sky.components[0].mbb_index.value[:] = hp.smoothing(
-        #    sky.components[0].mbb_index.value, fwhm=np.radians(2)
-        #    )                                                                    
+        sky.components[0].mbb_temperature.value[:] = hp.smoothing(
+            sky.components[0].mbb_temperature.value, fwhm=np.radians(2)
+            )
+        sky.components[0].mbb_index.value[:] = hp.smoothing(
+            sky.components[0].mbb_index.value, fwhm=np.radians(2)
+            )
     else:
-        sky =get_sky(nside, 'd0s0')
+        model=  'd0s0'
+        sky =get_sky(nside, model  )
 
 
     instrument = get_instrument('LiteBIRD')
     instrument.depth_i= sens_I_LB
     instrument.depth_p=v['v28']
-    signalonly = ( rank !=0 ) #rank 0 estimate syst. residuals ,the rest of procs estimate stat. residuals
 
-    np.random.seed(seed=1234567+rank )
-    freq_maps = get_observation(instrument, sky, noise=signalonly  )
+    print(f'model: {model} , Signal-only sims: {args.signalonly}, #ID {args.id }')
+    print(f'Performing  Component Separation on fsky =   {fsky:.2f}%   ')
+    np.random.seed(seed=1234567+args.id  )
+
+    freq_maps = get_observation(instrument, sky, noise= (not args.signalonly )  )
+    if not args.signalonly :
+        freq_maps += get_noise_realization(nside=nside, instrument = instrument )
+    for i, m in enumerate( freq_maps ):
+        if args.common_fwhm !=0 :
+            freq_maps[i] = hp.smoothing (m, fwhm= np.radians(args.common_fwhm/60. ))
+
     Bs_patches=hp.read_map(args.Bs_clusters, dtype=pl.int_, verbose=False)
     Bd_patches=hp.read_map(args.Bd_clusters, dtype=pl.int_, verbose=False)
     Td_patches=hp.read_map(args.Td_clusters, dtype=pl.int_, verbose=False)
@@ -98,11 +103,8 @@ def main(args) :
     elif not args.polarization and not args.include_temperature:
         raise ValueError("Unset arguments set at least one between  --polarization or --include-temperature")
 
-    np.savez(f'{args.output_dir}/res__d1s1__{args.output_string}__BdTdBs__{rank}__{string}__nside{nside}.npz',
+    np.savez(f'{args.output_dir}/res__{model}__{args.output_string}__BdTdBs__{args.id}__{string}__nside{nside}.npz',
                     **{n: a for n, a in results.items()})
-    comm.Barrier()
-
-    comm.Disconnect
 
 
 if __name__=="__main__":
@@ -112,14 +114,17 @@ if __name__=="__main__":
         parser.add_argument("--Td-clusters" ,    help='path of Td cluster patches', required=True)
         parser.add_argument("--output-dir" ,    help='path for outputs', default='./')
         parser.add_argument("--output-string" ,    help='label for outputs', default='')
-
-
         parser.add_argument("--polarization", help='compsep on polarization data ',
                                         action='store_true')
 
         parser.add_argument("--include-temperature",
                             help='add temperature data to compsep', action='store_true')
+        parser.add_argument("--signalonly",
+                            help='run on signal only data ', action='store_true')
+        parser.add_argument('--common-fwhm',
+                                help='convolve frequency maps to a common resolution', default=0 , type=np.float )
         parser.add_argument("--nside", help="nside of output maps" ,required=True ,  type=np.int_)
+        parser.add_argument("--id", help="" ,required=True ,  type=np.int_)
         parser.add_argument("--galmask", help = 'path to the  healpix galactic mask ', )
         args = parser.parse_args()
 

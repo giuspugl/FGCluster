@@ -111,7 +111,6 @@ def build_adjacency_from_heat_kernel(nside,comm, stopping_threshold=1e-7,KS_weig
 
     if KS_weighted :
         Theta =np.arccos(scalprod)
-        comm.Bcast(Q, root=0 )
         Psi  = Theta   + alpha *(1 - Q) *np.pi /2
         scalprod =  np.cos (Psi  )
 
@@ -122,10 +121,9 @@ def build_adjacency_from_heat_kernel(nside,comm, stopping_threshold=1e-7,KS_weig
     start_ell,stop_ell =split_data_among_processors(lmax, rank, nprocs )
     for l in np.arange(start_ell,stop_ell  ):
         Gloc += heat_kernel (scalprod, l, sigmabeam)
-    G=    np.zeros_like(Gloc )
-    comm.Reduce(Gloc , G , op=MPI.SUM)
+    Gloc= comm.allreduce(Gloc  , op=MPI.SUM)
 
-    return G
+    return Gloc
 
 def build_adjacency_from_KS_distance( nside, comm, X,sigmaX , ntests=50,nresample=100  ):
     if comm is None :
@@ -147,10 +145,8 @@ def build_adjacency_from_KS_distance( nside, comm, X,sigmaX , ntests=50,nresampl
         Qloc[i,j] = q
         Qloc[j,i] =q
 
-    Q   =  np.zeros_like(Qloc)
-    comm.Reduce(Qloc , Q  , op=MPI.SUM)
-
-    return minmaxrescale(Q, a=0, b=1 )
+    Qloc =comm.allreduce(Qloc  , op=MPI.SUM)
+    return minmaxrescale(Qloc, a=0, b=1 )
 
 
 
@@ -203,11 +199,9 @@ def build_adjacency_from_nearest_neighbours( nside,  comm,neighbour_order=1 ,KS_
             q=kolmogorov_smirnov_distance(x=X_i,y=X_j,  ntests=ntests, nsamp=nresample )
             Dweighted_local[i,j]= q
             Dweighted_local[j,i]=Dweighted_local[i,j]
-        Dweighted =  np.zeros_like(Dweighted_local)
-        comm.Reduce(Dweighted_local , Dweighted , op=MPI.SUM)
+        Dweighted_local= comm.allreduce(Dweighted_local  , op=MPI.SUM)
         ## we define  the KS distance   as a sin (Qij *pi/2 ) , with Qij the quantile of KS test
-
-        return np.sin(Dweighted*np.pi/2)
+        return np.sin(Dweighted_local *np.pi/2)
 
 def estimate_Laplacian_matrix (W , kind ='unnormalized'):
 
@@ -251,6 +245,8 @@ def get_under_over_partition_measures ( K, labels, W ):
         Xk =W[ck,:  ]
         mu[k] = Xk.mean(axis=0)
         Nk = len(ck)
+        if Nk <=1 :
+            continue
         E= pairwise_distances(X=Xk , Y=mu[k].reshape( 1,-1) , metric='euclidean'  )
         mean_intra_cluster_D [k]=E.sum () /Nk
     inter_cluster_D = pairwise_distances(mu, metric='euclidean'  )
@@ -262,8 +258,6 @@ def get_under_over_partition_measures ( K, labels, W ):
 def build_distance_matrix_from_eigenvectors(W ,comm  ):
     rank =comm.Get_rank()
     nprocs  = comm.Get_size()
-    comm.Bcast(W, root=0)
-
     npix = W.shape [0]
     Indices = np.array (np.triu_indices(npix ,1) )
     #assigning a symmetric matrix values in mpi
@@ -275,6 +269,5 @@ def build_distance_matrix_from_eigenvectors(W ,comm  ):
         # (each row of W  is an  m-dimensional (m being the number  of columns of W)
         Dloc[i,j] =  np.linalg.norm(W[i,:] - W[j,:]  )
         Dloc[j,i] =Dloc[i,j]
-    D=  np.zeros_like(Dloc )
-    comm.Reduce(Dloc , D, op=MPI.SUM)
-    return D
+    Dloc= comm.allreduce(Dloc  , op=MPI.SUM)
+    return Dloc
