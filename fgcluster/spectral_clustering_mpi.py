@@ -152,7 +152,7 @@ def build_adjacency_from_KS_distance( nside, comm, X,sigmaX , ntests=50,nresampl
     Qloc=Qloc.reshape((npix,npix))
     return minmaxrescale(Qloc, a=0, b=1 )
 
-def build_adjacency_from_KS_distance_savedata( nside, comm, X,sigmaX , ntests=50,nresample=100  ):
+def build_adjacency_from_KS_distance_savedata( nside, comm, X,sigmaX , ntests=50,nresample=100, matrixdir="./"):
     if comm is None :
         rank =0
         nprocs = 1
@@ -172,10 +172,10 @@ def build_adjacency_from_KS_distance_savedata( nside, comm, X,sigmaX , ntests=50
         Qloc[i,j] = q
         Qloc[j,i] =q
 
-    np.savez(f'localmatr_proc{rank}.npz', matr= Qloc)
+    np.savez(f'{matrixdir}/localmatr_proc{rank}.npz', matr= Qloc)
     if rank ==0 :
         for proc in range(nprocs):
-            qmatr = np.load(f'localmatr_proc{proc}.npz')['matr']
+            qmatr = np.load(f'{matrixdir}/localmatr_proc{proc}.npz')['matr']
             lstart,lstop = split_data_among_processors(size= Indices[0].size  ,rank= proc, nprocs=nprocs  )
             Qloc[Indices[:,lstart:lstop] ] = qmatr[Indices[:,lstart:lstop] ]
     comm.Bcast([Qloc , MPI.DOUBLE], root=0)
