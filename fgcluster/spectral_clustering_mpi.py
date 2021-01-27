@@ -143,14 +143,85 @@ def build_adjacency_from_KS_distance( nside, comm, X,sigmaX , ntests=50,nresampl
         X_i= (X[i], sigmaX[i])
         X_j= (X[j], sigmaX[j])
         q=kolmogorov_smirnov_distance(x=X_i,y=X_j , ntests=ntests, nsamp=nresample )
-        #Qloc[i,j] = q
-        #Qloc[j,i] =q
         Qloc[i*npix + j] = q
         Qloc[j*npix + i] = q
 
     Qloc= comm.allreduce(Qloc    , op=MPI.SUM)
     Qloc=Qloc.reshape((npix,npix))
     return minmaxrescale(Qloc, a=0, b=1 )
+
+def build_adjacency_from_KS_distance_gather( nside, comm, X,sigmaX , ntests=50,nresample=100  ):
+    if comm is None :
+        rank =0
+        nprocs = 1
+    else :
+        rank =comm.Get_rank()
+        nprocs  = comm.Get_size()
+
+    npix = hp.nside2npix(nside)
+
+    if rank == 0:
+        Q = np.zeros( (npix,npix ) , dtype=np.float_ ) #Create output array of same size
+        displacements_input ,split= get_scatter_info( datatoscatter=Q, nprocs=nprocs, N=npix        )
+    else:
+        #Create variables on other cores
+        displacements_input = None
+        split = None
+        Q = None
+
+    split = comm.bcast(split, root=0) #Broadcast split array to other cores
+    displacements = comm.bcast(displacements_input, root = 0)
+    Qloc = np.zeros(split[rank].shape , dtype=np.float_ ) #Create Qloc array on each core
+    offset_hpx = np.int_(displacements[rank] /npix)
+    for i in range( Qloc.shape[0]   ):
+        X_i= (X[ i +offset_hpx ] , sigmaX[ i +offset_hpx] )
+        for j in range(npix):
+            X_j= (X[ j] , sigmaX[j] )
+            q=kolmogorov_smirnov_distance(x=X_i,y=X_j , ntests=ntests, nsamp=nresample )
+            Qloc[i,  j] = q
+
+    comm.Barrier()
+    Q = comm.allgather (Qloc   )
+    Q = np.concatenate(Q).reshape((npix,npix ))
+    Q[np.diag_indices (npix )]=0.
+    return minmaxrescale(Q, a=0, b=1 )
+
+
+def build_adjacency_from_heat_kernel_gather(nside,comm, stopping_threshold=1e-7,KS_weighted=False, Q=None ,alpha=0.5   ):
+    if comm is None :
+        rank =0
+        nprocs = 1
+    else :
+        rank =comm.Get_rank()
+        nprocs  = comm.Get_size()
+    npix = hp.nside2npix(nside)
+    p = np.arange(npix )
+    V =np.array(hp.pix2vec(ipix =p, nside=hp.get_nside(p))).T
+    scalprod=minmaxrescale( V.dot(V.T), a=-1,b=1)
+
+
+    if KS_weighted :
+        Theta =np.arccos(scalprod)
+        Psi  = Theta   + alpha *(1 - Q) *np.pi /2
+        scalprod =  np.cos (Psi  )
+
+    lmax, sigmabeam = get_lmax (nside, stopping_threshold )
+    if rank == 0:
+        displacements_input ,split= get_scatter_info( datatoscatter=scalprod , nprocs=nprocs, N= npix         )
+    else:
+        #Create variables on other cores
+        displacements_input = None
+        split = None
+    split = comm.bcast(split, root=0) #Broadcast split array to other cores
+    displacements = comm.bcast(displacements_input, root = 0)
+    Gloc = np.zeros(split[rank].shape , dtype=np.float_ ) #Create Qloc array on each core
+    offset_hpx = np.int_(displacements[rank] /npix)
+    for l in np.arange(lmax ):
+        Gloc += heat_kernel (scalprod[offset_hpx : offset_hpx + Gloc.shape[0 ], :], l, sigmabeam)
+    comm.Barrier()
+    G = comm.allgather (Gloc   )
+    G = np.concatenate(G).reshape((npix,npix ))
+    return G 
 
 def build_adjacency_from_KS_distance_savedata( nside, comm, X,sigmaX , ntests=50,nresample=100, matrixdir="./"):
     if comm is None :
@@ -302,3 +373,19 @@ def build_distance_matrix_from_eigenvectors(W ,comm  ):
         Dloc[j,i] =Dloc[i,j]
     Dloc= comm.allreduce(Dloc  , op=MPI.SUM)
     return Dloc
+
+
+def get_scatter_info(datatoscatter , N , nprocs ) :
+    #Split input array by the number of   nprocs
+    split = np.array_split(datatoscatter ,nprocs ,axis = 0)
+
+
+    split_sizes = []
+
+    for i in range( len(split)):
+        split_sizes = np.append(split_sizes, len(split[i]))
+
+    split_sizes_in = split_sizes*N
+    offset_in = np.insert(np.cumsum(split_sizes_in),0,0)[0:-1]
+
+    return   offset_in  ,split
