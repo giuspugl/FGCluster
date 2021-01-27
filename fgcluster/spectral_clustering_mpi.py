@@ -135,6 +135,33 @@ def build_adjacency_from_KS_distance( nside, comm, X,sigmaX , ntests=50,nresampl
 
     npix = hp.nside2npix(nside)
     Indices = np.array (np.triu_indices(npix ,1) )
+    #Qloc = np.zeros( (npix,npix ))
+    Qloc = np.zeros( npix*npix )
+    start,stop= split_data_among_processors(size= Indices[0].size  ,rank= rank, nprocs=nprocs  )
+
+    for i,j  in   (Indices[:,start:stop] .T) :
+        X_i= (X[i], sigmaX[i])
+        X_j= (X[j], sigmaX[j])
+        q=kolmogorov_smirnov_distance(x=X_i,y=X_j , ntests=ntests, nsamp=nresample )
+        #Qloc[i,j] = q
+        #Qloc[j,i] =q
+        Qloc[i*npix + j] = q
+        Qloc[j*npix + i] = q
+
+    Qloc= comm.allreduce(Qloc    , op=MPI.SUM)
+    Qloc=Qloc.reshape((npix,npix))
+    return minmaxrescale(Qloc, a=0, b=1 )
+
+def build_adjacency_from_KS_distance_savedata( nside, comm, X,sigmaX , ntests=50,nresample=100  ):
+    if comm is None :
+        rank =0
+        nprocs = 1
+    else :
+        rank =comm.Get_rank()
+        nprocs  = comm.Get_size()
+
+    npix = hp.nside2npix(nside)
+    Indices = np.array (np.triu_indices(npix ,1) )
     Qloc = np.zeros( (npix,npix ))
     start,stop= split_data_among_processors(size= Indices[0].size  ,rank= rank, nprocs=nprocs  )
 
@@ -145,10 +172,14 @@ def build_adjacency_from_KS_distance( nside, comm, X,sigmaX , ntests=50,nresampl
         Qloc[i,j] = q
         Qloc[j,i] =q
 
-    Qloc =comm.allreduce(Qloc  , op=MPI.SUM)
+    np.savez(f'localmatr_proc{rank}.npz', matr= Qloc)
+    if rank ==0 :
+        for proc in range(nprocs):
+            qmatr = np.load(f'localmatr_proc{proc}.npz')['matr']
+            lstart,lstop = split_data_among_processors(size= Indices[0].size  ,rank= proc, nprocs=nprocs  )
+            Qloc[Indices[:,lstart:lstop] ] = qmatr[Indices[:,lstart:lstop] ]
+    comm.Bcast([Qloc , MPI.DOUBLE], root=0)
     return minmaxrescale(Qloc, a=0, b=1 )
-
-
 
 def build_adjacency_from_nearest_neighbours( nside,  comm,neighbour_order=1 ,KS_weighted=False,
                                                     X=None ,sigmaX=None, ntests=50,nresample=100 ):
