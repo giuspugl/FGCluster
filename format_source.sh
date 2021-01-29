@@ -19,7 +19,7 @@ fi
 blkrun="-l 88"
 
 # Directories to process
-pydirs="ps4c"
+pydirs="fgcluster"
 
 for pyd in ${pydirs}; do
     find "${base}/${pyd}" \
