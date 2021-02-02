@@ -183,17 +183,17 @@ def build_adjacency_from_heat_kernel_gather(nside, comm, stopping_threshold=1e-7
 
     lmax, sigmabeam = get_lmax(nside, stopping_threshold)
     if rank == 0:
-        displacements_input, split = get_scatter_info(
-            datatoscatter=scalprod, nprocs=nprocs, N=npix
+        displacements_input, splitsizes  = get_scatter_info(
+              nprocs=nprocs, N=npix
         )
     else:
         # Create variables on other cores
         displacements_input = None
-        split = None
-    split = comm.bcast(split, root=0)  # Broadcast split array to other cores
+        splitsizes = None
+    splitsizes = comm.bcast(splitsizes, root=0)  # Broadcast split array to other cores
     displacements = comm.bcast(displacements_input, root=0)
     Gloc = np.zeros(
-        split[rank].shape, dtype=np.float_
+         (splitsizes[rank], npix ), dtype=np.float_
     )  # Create Qloc array on each core
     offset_hpx = np.int_(displacements[rank] / npix)
     for l in np.arange(lmax):
@@ -217,20 +217,17 @@ def build_adjacency_from_KS_distance_gather(nside, comm, X, sigmaX, ntests=50, n
     npix = hp.nside2npix(nside)
 
     if rank == 0:
-        Q = np.zeros((npix, npix), dtype=np.float_)  # Create output array of same size
-        displacements_input, split = get_scatter_info(
-            datatoscatter=Q, nprocs=nprocs, N=npix
+        displacements_input, splitsizes  = get_scatter_info(
+              nprocs=nprocs, N=npix
         )
     else:
         # Create variables on other cores
         displacements_input = None
-        split = None
-        Q = None
-
-    split = comm.bcast(split, root=0)  # Broadcast split array to other cores
+        splitsizes = None
+    splitsizes = comm.bcast(splitsizes, root=0)  # Broadcast split array to other cores
     displacements = comm.bcast(displacements_input, root=0)
     Qloc = np.zeros(
-        split[rank].shape, dtype=np.float_
+        (splitsizes[rank], npix ), dtype=np.float_
     )  # Create Qloc array on each core
     offset_hpx = np.int_(displacements[rank] / npix)
     for i in range(Qloc.shape[0]):
@@ -269,18 +266,18 @@ def build_adjacency_from_heat_kernel_savedata(nside, comm, stopping_threshold=1e
 
     lmax, sigmabeam = get_lmax(nside, stopping_threshold)
     if rank == 0:
-        displacements_input, split = get_scatter_info(
-            datatoscatter=scalprod, nprocs=nprocs, N=npix
+        displacements_input, splitsizes  = get_scatter_info(
+        nprocs=nprocs, N=npix
         )
     else:
         # Create variables on other cores
         displacements_input = None
-        split = None
-    split = comm.bcast(split, root=0)  # Broadcast split array to other cores
+        splitsizes = None
+    splitsizes = comm.bcast(splitsizes, root=0)  # Broadcast split array to other cores
     displacements = comm.bcast(displacements_input, root=0)
     Gloc = np.zeros(
-        split[rank].shape, dtype=np.float_
-    )  # Create Qloc array on each core
+        (splitsizes[rank], npix ), dtype=np.float_
+        )  # Create Gloc array on each core
     offset_hpx = np.int_(displacements[rank] / npix)
     for l in np.arange(lmax):
         Gloc += heat_kernel(
@@ -309,20 +306,17 @@ def build_adjacency_from_KS_distance_savedata( nside, comm, X, sigmaX, ntests=50
     npix = hp.nside2npix(nside)
 
     if rank == 0:
-        Q = np.zeros((npix, npix), dtype=np.float_)  # Create output array of same size
-        displacements_input, split = get_scatter_info(
-            datatoscatter=Q, nprocs=nprocs, N=npix
+        displacements_input, splitsizes  = get_scatter_info(
+              nprocs=nprocs, N=npix
         )
     else:
         # Create variables on other cores
         displacements_input = None
-        split = None
-        Q = None
-
-    split = comm.bcast(split, root=0)  # Broadcast split array to other cores
+        splitsizes = None
+    splitsizes = comm.bcast(splitsizes, root=0)  # Broadcast split array to other cores
     displacements = comm.bcast(displacements_input, root=0)
     Qloc = np.zeros(
-        split[rank].shape, dtype=np.float_
+        (splitsizes[rank], npix ), dtype=np.float_
     )  # Create Qloc array on each core
     offset_hpx = np.int_(displacements[rank] / npix)
     for i in range(Qloc.shape[0]):
@@ -489,16 +483,13 @@ def build_distance_matrix_from_eigenvectors(W, comm):
     return Dloc
 
 
-def get_scatter_info(datatoscatter, N, nprocs):
+def get_scatter_info( N, nprocs):
     # Split input array by the number of   nprocs
+    datatoscatter = np.zeros((N,N))
     split = np.array_split(datatoscatter, nprocs, axis=0)
-
-    split_sizes = []
-
-    for i in range(len(split)):
-        split_sizes = np.append(split_sizes, len(split[i]))
+    split_sizes =  np.array ([  split[i].shape[0 ] for i in range(nprocs )], dtype='int' )
 
     split_sizes_in = split_sizes * N
     offset_in = np.insert(np.cumsum(split_sizes_in), 0, 0)[0:-1]
 
-    return offset_in, split
+    return offset_in, split_sizes
