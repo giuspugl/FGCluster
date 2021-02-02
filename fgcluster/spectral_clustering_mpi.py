@@ -246,7 +246,8 @@ def build_adjacency_from_KS_distance_gather(nside, comm, X, sigmaX, ntests=50, n
     return minmaxrescale(Q, a=0, b=1)
 
 
-def build_adjacency_from_heat_kernel_savedata(nside, comm, stopping_threshold=1e-7, KS_weighted=False, Q=None, alpha=0.5, matrixdir="./"):
+def build_adjacency_from_heat_kernel_savedata(nside, comm, stopping_threshold=1e-7, KS_weighted=False,
+                    Q=None, alpha=0.5, matrixdir="./", read_from_disc=True ):
 
     if comm is None:
         rank = 0
@@ -286,15 +287,19 @@ def build_adjacency_from_heat_kernel_savedata(nside, comm, stopping_threshold=1e
     np.save(f"{matrixdir}/localGmatr_proc{rank}.npy",  Gloc)
 
     comm.Barrier()
-    G= np.zeros((npix,npix ))
-    for proc in range(nprocs):
-        qmatr = np.load(f"{matrixdir}/localGmatr_proc{proc}.npy")
-        offset_hpx = np.int_(displacements[proc] / npix)
-        G[ offset_hpx:offset_hpx + qmatr.shape[0],:  ] = qmatr
-    return G
+    if read_from_disc :
+        G= np.zeros((npix,npix ))
+        for proc in range(nprocs):
+            qmatr = np.load(f"{matrixdir}/localGmatr_proc{proc}.npy")
+            offset_hpx = np.int_(displacements[proc] / npix)
+            G[ offset_hpx:offset_hpx + qmatr.shape[0],:  ] = qmatr
+        return G
+    else:
+        pass
 
 
-def build_adjacency_from_KS_distance_savedata( nside, comm, X, sigmaX, ntests=50, nresample=100, matrixdir="./"):
+def build_adjacency_from_KS_distance_savedata( nside, comm, X, sigmaX, ntests=50,
+                        nresample=100, matrixdir="./", read_from_disc=True ):
 
     if comm is None:
         rank = 0
@@ -331,14 +336,17 @@ def build_adjacency_from_KS_distance_savedata( nside, comm, X, sigmaX, ntests=50
     comm.Barrier()
 
     np.save(f"{matrixdir}/localQmatr_proc{rank}.npy", Qloc)
-    Q= np.zeros((npix,npix ))
+    if read_from_disc:
+        Q= np.zeros((npix,npix ))
 
-    for proc in range(nprocs):
-        qmatr = np.load(f"{matrixdir}/localQmatr_proc{proc}.npy")
-        offset_hpx = np.int_(displacements[proc] / npix)
-        Q[ offset_hpx:offset_hpx + qmatr.shape[0],:  ] = qmatr
-    Q[np.diag_indices(npix)] = 0.0
-    return minmaxrescale(Q, a=0, b=1)
+        for proc in range(nprocs):
+            qmatr = np.load(f"{matrixdir}/localQmatr_proc{proc}.npy")
+            offset_hpx = np.int_(displacements[proc] / npix)
+            Q[ offset_hpx:offset_hpx + qmatr.shape[0],:  ] = qmatr
+        Q[np.diag_indices(npix)] = 0.0
+        return minmaxrescale(Q, a=0, b=1)
+    else:
+        pass 
 
 
 def build_adjacency_from_nearest_neighbours(
