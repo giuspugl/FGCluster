@@ -182,20 +182,12 @@ def build_adjacency_from_heat_kernel_gather(nside, comm, stopping_threshold=1e-7
         scalprod = np.cos(Psi)
 
     lmax, sigmabeam = get_lmax(nside, stopping_threshold)
-    if rank == 0:
-        displacements_input, splitsizes  = get_scatter_info(
-              nprocs=nprocs, N=npix
-        )
-    else:
-        # Create variables on other cores
-        displacements_input = None
-        splitsizes = None
-    splitsizes = comm.bcast(splitsizes, root=0)  # Broadcast split array to other cores
-    displacements = comm.bcast(displacements_input, root=0)
+    start_row, end_row = split_data_among_processors(size=npix, rank=rank, nprocs=nprocs )
+    # Create loc array on each core
     Gloc = np.zeros(
-         (splitsizes[rank], npix ), dtype=np.float_
-    )  # Create Qloc array on each core
-    offset_hpx = np.int_(displacements[rank] / npix)
+        (end_row-start_row , npix ), dtype=np.float_
+    )
+    offset_hpx = start_row
     for l in np.arange(lmax):
         Gloc += heat_kernel(
             scalprod[offset_hpx : offset_hpx + Gloc.shape[0], :], l, sigmabeam
@@ -215,21 +207,11 @@ def build_adjacency_from_KS_distance_gather(nside, comm, X, sigmaX, ntests=50, n
         nprocs = comm.Get_size()
 
     npix = hp.nside2npix(nside)
-
-    if rank == 0:
-        displacements_input, splitsizes  = get_scatter_info(
-              nprocs=nprocs, N=npix
-        )
-    else:
-        # Create variables on other cores
-        displacements_input = None
-        splitsizes = None
-    splitsizes = comm.bcast(splitsizes, root=0)  # Broadcast split array to other cores
-    displacements = comm.bcast(displacements_input, root=0)
+    start_row, end_row = split_data_among_processors(size=npix, rank=rank, nprocs=nprocs )
     Qloc = np.zeros(
-        (splitsizes[rank], npix ), dtype=np.float_
+        (end_row-start_row , npix ), dtype=np.float_
     )  # Create Qloc array on each core
-    offset_hpx = np.int_(displacements[rank] / npix)
+    offset_hpx = start_row
     for i in range(Qloc.shape[0]):
         X_i = (X[i + offset_hpx], sigmaX[i + offset_hpx])
         for j in range(npix):
@@ -266,20 +248,12 @@ def build_adjacency_from_heat_kernel_savedata(nside, comm, stopping_threshold=1e
         scalprod = np.cos(Psi)
 
     lmax, sigmabeam = get_lmax(nside, stopping_threshold)
-    if rank == 0:
-        displacements_input, splitsizes  = get_scatter_info(
-        nprocs=nprocs, N=npix
-        )
-    else:
-        # Create variables on other cores
-        displacements_input = None
-        splitsizes = None
-    splitsizes = comm.bcast(splitsizes, root=0)  # Broadcast split array to other cores
-    displacements = comm.bcast(displacements_input, root=0)
+    start_row, end_row = split_data_among_processors(size=npix, rank=rank, nprocs=nprocs )
+    # Create loc array on each core
     Gloc = np.zeros(
-        (splitsizes[rank], npix ), dtype=np.float_
-        )  # Create Gloc array on each core
-    offset_hpx = np.int_(displacements[rank] / npix)
+        (end_row-start_row , npix ), dtype=np.float_
+    )
+    offset_hpx = start_row
     for l in np.arange(lmax):
         Gloc += heat_kernel(
             scalprod[offset_hpx : offset_hpx + Gloc.shape[0], :], l, sigmabeam
@@ -290,9 +264,9 @@ def build_adjacency_from_heat_kernel_savedata(nside, comm, stopping_threshold=1e
     if read_from_disc :
         G= np.zeros((npix,npix ))
         for proc in range(nprocs):
-            qmatr = np.load(f"{matrixdir}/localGmatr_proc{proc}.npy")
-            offset_hpx = np.int_(displacements[proc] / npix)
-            G[ offset_hpx:offset_hpx + qmatr.shape[0],:  ] = qmatr
+            qmatr = np.load(f"{matrixdir}/localGmatr_proc{proc}.npy", allow_pickle=True)
+            start ,end = split_data_among_processors(size=npix, rank=proc , nprocs=nprocs )
+            G[ start:end ,:  ] = qmatr
         return G
     else:
         pass
@@ -310,20 +284,11 @@ def build_adjacency_from_KS_distance_savedata( nside, comm, X, sigmaX, ntests=50
 
     npix = hp.nside2npix(nside)
 
-    if rank == 0:
-        displacements_input, splitsizes  = get_scatter_info(
-              nprocs=nprocs, N=npix
-        )
-    else:
-        # Create variables on other cores
-        displacements_input = None
-        splitsizes = None
-    splitsizes = comm.bcast(splitsizes, root=0)  # Broadcast split array to other cores
-    displacements = comm.bcast(displacements_input, root=0)
+    start_row, end_row = split_data_among_processors(size=npix, rank=rank, nprocs=nprocs )
     Qloc = np.zeros(
-        (splitsizes[rank], npix ), dtype=np.float_
+        (end_row-start_row , npix ), dtype=np.float_
     )  # Create Qloc array on each core
-    offset_hpx = np.int_(displacements[rank] / npix)
+    offset_hpx = start_row
     for i in range(Qloc.shape[0]):
         X_i = (X[i + offset_hpx], sigmaX[i + offset_hpx])
         for j in range(npix):
@@ -340,13 +305,13 @@ def build_adjacency_from_KS_distance_savedata( nside, comm, X, sigmaX, ntests=50
         Q= np.zeros((npix,npix ))
 
         for proc in range(nprocs):
-            qmatr = np.load(f"{matrixdir}/localQmatr_proc{proc}.npy")
-            offset_hpx = np.int_(displacements[proc] / npix)
-            Q[ offset_hpx:offset_hpx + qmatr.shape[0],:  ] = qmatr
+            qmatr = np.load(f"{matrixdir}/localQmatr_proc{proc}.npy", allow_pickle=True )
+            start ,end = split_data_among_processors(size=npix, rank=proc , nprocs=nprocs )
+            Q[ start:end ,:  ] = qmatr
         Q[np.diag_indices(npix)] = 0.0
         return minmaxrescale(Q, a=0, b=1)
     else:
-        pass 
+        pass
 
 
 def build_adjacency_from_nearest_neighbours(
