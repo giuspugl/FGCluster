@@ -206,7 +206,8 @@ def build_adjacency_from_KS_distance_gather(nside, comm, X, sigmaX, ntests=50, n
         rank = comm.Get_rank()
         nprocs = comm.Get_size()
 
-    npix = hp.nside2npix(nside)
+    #npix = hp.nside2npix(nside)
+    npix = X.size
     start_row, end_row = split_data_among_processors(size=npix, rank=rank, nprocs=nprocs )
     Qloc = np.zeros(
         (end_row-start_row , npix ), dtype=np.float_
@@ -466,3 +467,32 @@ def get_scatter_info( N, nprocs):
     offset_in = np.insert(np.cumsum(split_sizes_in), 0, 0)[0:-1]
 
     return offset_in, split_sizes
+
+
+def extend_matrix(mask ,compressed_matr , fill_value=0   ):
+    """
+    Given a compressed affinity matrix (evaluated outside a masked region defined by mask)
+    we expand into a Npix X Npix affinity matrix  with non zero elements mapped consistently
+    from the compressed matrix .
+
+    - `mask`: {`np.array`}
+        binary mask in the healpix format. It's True (False) outside (inside) the masked region
+    - `compressed_matr` : {`np.array`}
+        matrix with adjacency defined outside the masked region,   encoding less pixels than
+        a matrix built from a full sky healpix map.
+    - `fill_value`:{float }
+        value to fill the matrix elements in correspondence of the masked area
+
+    - `expanded_matr` :{`np.array`}
+        matrix _expanded_ with full size with all the pixels encoded in a Healpix map.
+        Matrix elements in the masked area are set to zero by default.(see `fill_value`)
+    """
+    Npix = hp.nside2npix(hp.get_nside(mask) )
+    mask= np.expand_dims(mask,axis=1)
+    mask2d = np.bool_(mask.dot(mask.T))
+
+
+    expanded_matr =np.zeros((Npix,Npix ))
+    expanded_matr [mask2d ]= compressed_matr.flatten()
+    expanded_matr [~mask2d ]=  fill_value
+    return expanded_matr

@@ -32,10 +32,10 @@ def plotclusters(labels, imap):
     return outm
 
 
-def check_nside(nsideout, mapin):
+def check_nside(nsideout, mapin, verbose=False ):
     nside2 = hp.get_nside(mapin)
-    if nside2 != nsideout:
-        print("running ud_grade ")
+    if nside2 != nsideout :
+        if verbose : print("running ud_grade ")
         return hp.ud_grade(nside_out=nsideout, map_in=mapin)
     else:
         return mapin
