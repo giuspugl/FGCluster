@@ -540,10 +540,11 @@ def build_adjacency_from_KS_distance_nn(nside, comm, X, sigmaX,
     npix = hp.nside2npix(nside)
     Indices = (np.triu_indices(npix, 1))
     Qloc = np.zeros(npix * npix)
-    #    start, stop = split_data_among_processors(
-    #        size=Indices[0].size, rank=rank, nprocs=nprocs
-    #    )
-    for i in range(npix):
+    start, stop = split_data_among_processors(
+            size=Indices[0].size, rank=rank, nprocs=nprocs
+        )
+
+    for i in range(start,stop ):
         i_indx =np.ma.masked_equal(Indices[0],i ) .mask
         j_indx =Indices[1][i_indx]
         listpix = get_neighbours(ipix=i,nside=nside,order=order_nn)
@@ -556,7 +557,7 @@ def build_adjacency_from_KS_distance_nn(nside, comm, X, sigmaX,
             Qloc[i * npix + j] = q
             Qloc[j * npix + i] = q
 
-    #Qloc = comm.allreduce(Qloc, op=MPI.SUM)
+    Qloc = comm.allreduce(Qloc, op=MPI.SUM)
     Qloc = Qloc.reshape((npix, npix))
     return minmaxrescale(Qloc, a=0, b=1)
 
@@ -579,21 +580,23 @@ def build_adjacency_from_compatibility(nside, comm, X, sigmaX):
     npix = hp.nside2npix(nside)
     Indices = (np.triu_indices(npix, 1))
     Qloc = np.zeros( (npix,npix ))
+    start, stop = split_data_among_processors(
+            size=Indices[0].size, rank=rank, nprocs=nprocs
+        )
 
-
-    for i  in Indices[0][:-1]:
+    for i  in Indices[0][start:stop ]:
         i_indx =np.ma.masked_equal(Indices[0],i ) .mask
         j_indx =Indices[1][i_indx]
         X_i = (X[i], sigmaX[i])
         X_j = (X[j_indx], sigmaX[j_indx ])
         q = statistical_compatibility(x=X_i, y=X_j)
-        q =  minmaxrescale(q , a=0, b=1)
 
-        Qloc[i , intersect ] =   1- q
+        Qloc[i , intersect ] =  1-  q
         Qloc[intersect  , i] =   1-   q
-
-        #Qloc = comm.allreduce(Qloc, op=MPI.SUM)
-        return Qloc
+    mask =Qloc <0
+    Qloc[mask]= 0
+    Qloc = comm.allreduce(Qloc, op=MPI.SUM)
+    return Qloc
 
 def build_adjacency_from_compatibility_nn(nside, comm, X, sigmaX, order_nn):
     if comm is None:
@@ -605,13 +608,11 @@ def build_adjacency_from_compatibility_nn(nside, comm, X, sigmaX, order_nn):
     npix = hp.nside2npix(nside)
     Indices = (np.triu_indices(npix, 1))
     Qloc = np.zeros((npix , npix))
-    #    start, stop = split_data_among_processors(
-    #        size=Indices[0].size, rank=rank, nprocs=nprocs
-    #    )
+    start, stop = split_data_among_processors(
+            size=Indices[0].size, rank=rank, nprocs=nprocs
+        )
 
-    for i in range(npix-1 ):
-        #we end  the for loop at the last second row as there
-        # ain't no elements in the  last row
+    for i in range(start, stop  ):
 
         i_indx =np.ma.masked_equal(Indices[0],i ) .mask
         j_indx =Indices[1][i_indx]
@@ -621,11 +622,10 @@ def build_adjacency_from_compatibility_nn(nside, comm, X, sigmaX, order_nn):
         X_j = (X[intersect ], sigmaX[intersect])
 
         q = statistical_compatibility(x=X_i, y=X_j)
-        #q =     minmaxrescale(q , a=0, b=1)
 
         Qloc[i , intersect ] =  1-  q
         Qloc[intersect  , i] =   1-   q
     mask =Qloc <0
     Qloc[mask]= 0
-    #Qloc = comm.allreduce(Qloc, op=MPI.SUM)
+    Qloc = comm.allreduce(Qloc, op=MPI.SUM)
     return Qloc
