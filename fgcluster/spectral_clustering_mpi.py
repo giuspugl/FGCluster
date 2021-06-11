@@ -581,7 +581,7 @@ def build_adjacency_from_compatibility(nside, comm, X, sigmaX):
     Indices = (np.triu_indices(npix, 1))
     Qloc = np.zeros( (npix,npix ))
     start, stop = split_data_among_processors(
-            size=Indices[0].size, rank=rank, nprocs=nprocs
+            size=npix, rank=rank, nprocs=nprocs
         )
 
     for i  in Indices[0][start:stop ]:
@@ -591,8 +591,8 @@ def build_adjacency_from_compatibility(nside, comm, X, sigmaX):
         X_j = (X[j_indx], sigmaX[j_indx ])
         q = statistical_compatibility(x=X_i, y=X_j)
 
-        Qloc[i , intersect ] =  1-  q
-        Qloc[intersect  , i] =   1-   q
+        Qloc[i , j_indx ] =  1-  q
+        Qloc[j_indx  , i] =   1-   q
     mask =Qloc <0
     Qloc[mask]= 0
     Qloc = comm.allreduce(Qloc, op=MPI.SUM)
@@ -609,9 +609,41 @@ def build_adjacency_from_compatibility_nn(nside, comm, X, sigmaX, order_nn):
     Indices = (np.triu_indices(npix, 1))
     Qloc = np.zeros((npix , npix))
     start, stop = split_data_among_processors(
-            size=Indices[0].size, rank=rank, nprocs=nprocs
+            size=npix, rank=rank, nprocs=nprocs
         )
 
+    for i in range(start, stop  ):
+
+        i_indx =np.ma.masked_equal(Indices[0],i ) .mask
+        j_indx =Indices[1][i_indx]
+        listpix = get_neighbours(ipix=i,nside=nside,order=order_nn)
+        intersect = np.intersect1d(j_indx, listpix )
+        X_i = (X[i], sigmaX[i])
+        X_j = (X[intersect ], sigmaX[intersect])
+
+        q = statistical_compatibility(x=X_i, y=X_j)
+
+        Qloc[i , intersect ] =  1-  q
+        Qloc[intersect  , i] =   1-   q
+    mask =Qloc <0
+    Qloc[mask]= 0
+    Qloc = comm.allreduce(Qloc, op=MPI.SUM)
+    return Qloc
+
+
+def build_adjacency_from_compatibility_nn(nside,  X, sigmaX, order_nn, comm=None):
+    if comm is None:
+        rank = 0
+        nprocs = 1
+    else:
+        rank = comm.Get_rank()
+        nprocs = comm.Get_size()
+    npix = hp.nside2npix(nside)
+    Indices = (np.triu_indices(npix, 1))
+    Qloc = np.zeros((npix , npix))
+    start, stop = split_data_among_processors(
+            size=npix, rank=rank, nprocs=nprocs
+        )
     for i in range(start, stop  ):
 
         i_indx =np.ma.masked_equal(Indices[0],i ) .mask
