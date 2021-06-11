@@ -151,47 +151,21 @@ def build_adjacency_from_KS_distance(nside, comm, X, sigmaX, ntests=50, nresampl
     start, stop = split_data_among_processors(
         size=Indices[0].size, rank=rank, nprocs=nprocs
     )
-
-    for i, j in Indices[:, start:stop].T:
-        X_i = (X[i], sigmaX[i])
-        X_j = (X[j], sigmaX[j])
-        q = kolmogorov_smirnov_distance(x=X_i, y=X_j, ntests=ntests, nsamp=nresample)
-        Qloc[i * npix + j] = q
-        Qloc[j * npix + i] = q
-
-    Qloc = comm.allreduce(Qloc, op=MPI.SUM)
-    Qloc = Qloc.reshape((npix, npix))
-    return minmaxrescale(Qloc, a=0, b=1)
-
-def build_adjacency_from_KS_distance2(nside, comm, X, sigmaX, ntests=50, nresample=100):
-    if comm is None:
-        rank = 0
-        nprocs = 1
-    else:
-        rank = comm.Get_rank()
-        nprocs = comm.Get_size()
-    npix = hp.nside2npix(nside)
-    Indices = (np.triu_indices(npix, 1))
-    Qloc = np.zeros(npix * npix)
-    #    start, stop = split_data_among_processors(
-    #        size=Indices[0].size, rank=rank, nprocs=nprocs
-    #    )
-    for i in range(npix):
+    for i in range(start,stop ):
         i_indx =np.ma.masked_equal(Indices[0],i ) .mask
         j_indx =Indices[1][i_indx]
-        listpix = get_neighbours(ipix=i,nside=nside,order=6 )
-        intersect = np.intersect1d(j_indx, listpix )
         for j in j_indx :
-
             X_i = (X[i], sigmaX[i])
             X_j = (X[j], sigmaX[j])
             q = kolmogorov_smirnov_distance(x=X_i, y=X_j, ntests=ntests, nsamp=nresample)
             Qloc[i * npix + j] = q
             Qloc[j * npix + i] = q
 
-    #Qloc = comm.allreduce(Qloc, op=MPI.SUM)
+    Qloc = comm.allreduce(Qloc, op=MPI.SUM)
     Qloc = Qloc.reshape((npix, npix))
     return minmaxrescale(Qloc, a=0, b=1)
+
+
 
 def build_adjacency_from_heat_kernel_gather(nside, comm, stopping_threshold=1e-7, KS_weighted=False, Q=None, alpha=0.5):
 
@@ -475,14 +449,18 @@ def build_distance_matrix_from_eigenvectors(W, comm):
     npix = W.shape[0]
     Indices = np.array(np.triu_indices(npix, 1))
     # assigning a symmetric matrix values in mpi
-    globalsize = Indices.shape[1]
-    start, stop = split_data_among_processors(size=globalsize, rank=rank, nprocs=nprocs)
+    #globalsize = Indices.shape[1]
+    #start, stop = split_data_among_processors(size=globalsize, rank=rank, nprocs=nprocs)
+    start, stop = split_data_among_processors(size=npix, rank=rank, nprocs=nprocs)
     Dloc = np.zeros((npix, npix))
-    for i, j in Indices[:, start:stop].T:
+
+    for i  in range(start,stop  ):
+        i_indx =np.ma.masked_equal(Indices[0],i ) .mask
+        j_indx =Indices[1][i_indx]
         # the euclidean distance is estimated considering npix samples of m features
         # (each row of W  is an  m-dimensional (m being the number  of columns of W)
-        Dloc[i, j] = np.linalg.norm(W[i, :] - W[j, :])
-        Dloc[j, i] = Dloc[i, j]
+        Dloc[i, j_indx] = np.linalg.norm(W[i, :] - W[j_indx, :])
+        Dloc[j_indx, i] = Dloc[i, j_indx]
     Dloc = comm.allreduce(Dloc, op=MPI.SUM)
     return Dloc
 
@@ -584,7 +562,7 @@ def build_adjacency_from_compatibility(nside, comm, X, sigmaX):
             size=npix, rank=rank, nprocs=nprocs
         )
 
-    for i  in Indices[0][start:stop ]:
+    for i  in range(start,stop ):
         i_indx =np.ma.masked_equal(Indices[0],i ) .mask
         j_indx =Indices[1][i_indx]
         X_i = (X[i], sigmaX[i])
@@ -612,38 +590,6 @@ def build_adjacency_from_compatibility_nn(nside, comm, X, sigmaX, order_nn):
             size=npix, rank=rank, nprocs=nprocs
         )
 
-    for i in range(start, stop  ):
-
-        i_indx =np.ma.masked_equal(Indices[0],i ) .mask
-        j_indx =Indices[1][i_indx]
-        listpix = get_neighbours(ipix=i,nside=nside,order=order_nn)
-        intersect = np.intersect1d(j_indx, listpix )
-        X_i = (X[i], sigmaX[i])
-        X_j = (X[intersect ], sigmaX[intersect])
-
-        q = statistical_compatibility(x=X_i, y=X_j)
-
-        Qloc[i , intersect ] =  1-  q
-        Qloc[intersect  , i] =   1-   q
-    mask =Qloc <0
-    Qloc[mask]= 0
-    Qloc = comm.allreduce(Qloc, op=MPI.SUM)
-    return Qloc
-
-
-def build_adjacency_from_compatibility_nn(nside,  X, sigmaX, order_nn, comm=None):
-    if comm is None:
-        rank = 0
-        nprocs = 1
-    else:
-        rank = comm.Get_rank()
-        nprocs = comm.Get_size()
-    npix = hp.nside2npix(nside)
-    Indices = (np.triu_indices(npix, 1))
-    Qloc = np.zeros((npix , npix))
-    start, stop = split_data_among_processors(
-            size=npix, rank=rank, nprocs=nprocs
-        )
     for i in range(start, stop  ):
 
         i_indx =np.ma.masked_equal(Indices[0],i ) .mask
