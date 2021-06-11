@@ -2,7 +2,7 @@ import healpy as hp
 import pylab as pl
 import numpy as np
 
-from scipy.stats import norm, ks_2samp
+    from scipy.stats import norm, ks_2samp
 from scipy import sparse
 from scipy.special import legendre
 from sklearn.metrics import pairwise_distances
@@ -71,6 +71,7 @@ def kolmogorov_smirnov_distance(x, y, ntests, nsamp):
     sigma2 = y[1]
     D = []
     # We  repeat the KS test ntest times (it takes time) on two samples with same size n=m
+    np.random.seed(1234)
 
     for test in range(ntests):
         rvs1 = norm.rvs(size=nsamp, loc=mu1, scale=sigma1)
@@ -162,6 +163,35 @@ def build_adjacency_from_KS_distance(nside, comm, X, sigmaX, ntests=50, nresampl
     Qloc = Qloc.reshape((npix, npix))
     return minmaxrescale(Qloc, a=0, b=1)
 
+def build_adjacency_from_KS_distance2(nside, comm, X, sigmaX, ntests=50, nresample=100):
+    if comm is None:
+        rank = 0
+        nprocs = 1
+    else:
+        rank = comm.Get_rank()
+        nprocs = comm.Get_size()
+    npix = hp.nside2npix(nside)
+    Indices = (np.triu_indices(npix, 1))
+    Qloc = np.zeros(npix * npix)
+    #    start, stop = split_data_among_processors(
+    #        size=Indices[0].size, rank=rank, nprocs=nprocs
+    #    )
+    for i in range(npix):
+        i_indx =np.ma.masked_equal(Indices[0],i ) .mask
+        j_indx =Indices[1][i_indx]
+        listpix =fgc.get_neighbours(ipix=i,nside=nside,order=6 )
+        intersect = np.intersect1d(j_indx, listpix )
+        for j in j_indx :
+
+            X_i = (X[i], sigmaX[i])
+            X_j = (X[j], sigmaX[j])
+            q = kolmogorov_smirnov_distance(x=X_i, y=X_j, ntests=ntests, nsamp=nresample)
+            Qloc[i * npix + j] = q
+            Qloc[j * npix + i] = q
+
+    #Qloc = comm.allreduce(Qloc, op=MPI.SUM)
+    Qloc = Qloc.reshape((npix, npix))
+    return minmaxrescale(Qloc, a=0, b=1)
 
 def build_adjacency_from_heat_kernel_gather(nside, comm, stopping_threshold=1e-7, KS_weighted=False, Q=None, alpha=0.5):
 
@@ -496,3 +526,106 @@ def extend_matrix(mask ,compressed_matr , fill_value=0   ):
     expanded_matr [mask2d ]= compressed_matr.flatten()
     expanded_matr [~mask2d ]=  fill_value
     return expanded_matr
+
+
+
+def build_adjacency_from_KS_distance_nn(nside, comm, X, sigmaX,
+                        order_nn, ntests=50, nresample=100):
+    if comm is None:
+        rank = 0
+        nprocs = 1
+    else:
+        rank = comm.Get_rank()
+        nprocs = comm.Get_size()
+    npix = hp.nside2npix(nside)
+    Indices = (np.triu_indices(npix, 1))
+    Qloc = np.zeros(npix * npix)
+    #    start, stop = split_data_among_processors(
+    #        size=Indices[0].size, rank=rank, nprocs=nprocs
+    #    )
+    for i in range(npix):
+        i_indx =np.ma.masked_equal(Indices[0],i ) .mask
+        j_indx =Indices[1][i_indx]
+        listpix =fgc.get_neighbours(ipix=i,nside=nside,order=order_nn)
+        intersect = np.intersect1d(j_indx, listpix )
+        for j in intersect :
+
+            X_i = (X[i], sigmaX[i])
+            X_j = (X[j], sigmaX[j])
+            q = kolmogorov_smirnov_distance(x=X_i, y=X_j, ntests=ntests, nsamp=nresample)
+            Qloc[i * npix + j] = q
+            Qloc[j * npix + i] = q
+
+    #Qloc = comm.allreduce(Qloc, op=MPI.SUM)
+    Qloc = Qloc.reshape((npix, npix))
+    return minmaxrescale(Qloc, a=0, b=1)
+
+def statistical_compatibility (x, y  ):
+
+    mu1 = x[0]
+    sigma1 = x[1]
+    mu2 = y[0]
+    sigma2 = y[1]
+    significance = pl.fabs( mu1-mu2)/pl.sqrt(sigma1**2 +sigma2**2)
+    return significance
+
+def build_adjacency_from_compatibility(nside, comm, X, sigmaX):
+    if comm is None:
+        rank = 0
+        nprocs = 1
+    else:
+        rank = comm.Get_rank()
+        nprocs = comm.Get_size()
+    npix = hp.nside2npix(nside)
+    Indices = (np.triu_indices(npix, 1))
+    Qloc = np.zeros( (npix,npix ))
+
+
+    for i  in Indices[0][:-1]:
+        i_indx =np.ma.masked_equal(Indices[0],i ) .mask
+        j_indx =Indices[1][i_indx]
+        X_i = (X[i], sigmaX[i])
+        X_j = (X[j_indx], sigmaX[j_indx ])
+        q = statistical_compatibility(x=X_i, y=X_j)
+        q =  minmaxrescale(q , a=0, b=1)
+
+        Qloc[i , intersect ] =   1- q
+        Qloc[intersect  , i] =   1-   q
+
+        #Qloc = comm.allreduce(Qloc, op=MPI.SUM)
+        return Qloc
+
+def build_adjacency_from_compatibility_nn(nside, comm, X, sigmaX, order_nn):
+    if comm is None:
+        rank = 0
+        nprocs = 1
+    else:
+        rank = comm.Get_rank()
+        nprocs = comm.Get_size()
+    npix = hp.nside2npix(nside)
+    Indices = (np.triu_indices(npix, 1))
+    Qloc = np.zeros((npix , npix))
+    #    start, stop = split_data_among_processors(
+    #        size=Indices[0].size, rank=rank, nprocs=nprocs
+    #    )
+
+    for i in range(npix-1 ):
+        #we end  the for loop at the last second row as there
+        # ain't no elements in the  last row
+
+        i_indx =np.ma.masked_equal(Indices[0],i ) .mask
+        j_indx =Indices[1][i_indx]
+        listpix =fgc.get_neighbours(ipix=i,nside=nside,order=order_nn)
+        intersect = np.intersect1d(j_indx, listpix )
+        X_i = (X[i], sigmaX[i])
+        X_j = (X[intersect ], sigmaX[intersect])
+
+        q = statistical_compatibility(x=X_i, y=X_j)
+        #q =     minmaxrescale(q , a=0, b=1)
+
+        Qloc[i , intersect ] =  1-  q
+        Qloc[intersect  , i] =   1-   q
+    mask =Qloc <0
+    Qloc[mask]= 0
+    #Qloc = comm.allreduce(Qloc, op=MPI.SUM)
+    return Qloc
