@@ -2,7 +2,7 @@ import healpy as hp
 import pylab as pl
 import numpy as np
 
-    from scipy.stats import norm, ks_2samp
+from scipy.stats import norm, ks_2samp
 from scipy import sparse
 from scipy.special import legendre
 from sklearn.metrics import pairwise_distances
@@ -71,7 +71,7 @@ def kolmogorov_smirnov_distance(x, y, ntests, nsamp):
     sigma2 = y[1]
     D = []
     # We  repeat the KS test ntest times (it takes time) on two samples with same size n=m
-    np.random.seed(1234)
+    #np.random.seed(1234)
 
     for test in range(ntests):
         rvs1 = norm.rvs(size=nsamp, loc=mu1, scale=sigma1)
