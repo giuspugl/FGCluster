@@ -179,7 +179,7 @@ def build_adjacency_from_KS_distance2(nside, comm, X, sigmaX, ntests=50, nresamp
     for i in range(npix):
         i_indx =np.ma.masked_equal(Indices[0],i ) .mask
         j_indx =Indices[1][i_indx]
-        listpix =fgc.get_neighbours(ipix=i,nside=nside,order=6 )
+        listpix = get_neighbours(ipix=i,nside=nside,order=6 )
         intersect = np.intersect1d(j_indx, listpix )
         for j in j_indx :
 
@@ -546,7 +546,7 @@ def build_adjacency_from_KS_distance_nn(nside, comm, X, sigmaX,
     for i in range(npix):
         i_indx =np.ma.masked_equal(Indices[0],i ) .mask
         j_indx =Indices[1][i_indx]
-        listpix =fgc.get_neighbours(ipix=i,nside=nside,order=order_nn)
+        listpix = get_neighbours(ipix=i,nside=nside,order=order_nn)
         intersect = np.intersect1d(j_indx, listpix )
         for j in intersect :
 
@@ -615,7 +615,7 @@ def build_adjacency_from_compatibility_nn(nside, comm, X, sigmaX, order_nn):
 
         i_indx =np.ma.masked_equal(Indices[0],i ) .mask
         j_indx =Indices[1][i_indx]
-        listpix =fgc.get_neighbours(ipix=i,nside=nside,order=order_nn)
+        listpix = get_neighbours(ipix=i,nside=nside,order=order_nn)
         intersect = np.intersect1d(j_indx, listpix )
         X_i = (X[i], sigmaX[i])
         X_j = (X[intersect ], sigmaX[intersect])
