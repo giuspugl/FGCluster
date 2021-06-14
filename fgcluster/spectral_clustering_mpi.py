@@ -453,14 +453,20 @@ def build_distance_matrix_from_eigenvectors(W, comm):
     #start, stop = split_data_among_processors(size=globalsize, rank=rank, nprocs=nprocs)
     start, stop = split_data_among_processors(size=npix, rank=rank, nprocs=nprocs)
     Dloc = np.zeros((npix, npix))
-
     for i  in range(start,stop  ):
         i_indx =np.ma.masked_equal(Indices[0],i ) .mask
         j_indx =Indices[1][i_indx]
         # the euclidean distance is estimated considering npix samples of m features
         # (each row of W  is an  m-dimensional (m being the number  of columns of W)
-        Dloc[i, j_indx] = np.linalg.norm(W[i, :] - W[j_indx, :])
-        Dloc[j_indx, i] = Dloc[i, j_indx]
+        try:
+            Dloc[i, j_indx] = np.linalg.norm(W[i, :]- W[j_indx, :], axis=1)
+            Dloc[j_indx, i] = Dloc[i, j_indx]
+        except ValueError:
+            #this exception is to avoid the ValueError raising
+            # when there ain't no j-elements in correspondence of the
+            # last row  
+            Dloc[i,i]=0.
+
     Dloc = comm.allreduce(Dloc, op=MPI.SUM)
     return Dloc
 

@@ -66,6 +66,7 @@ def test_spectral_clustering( comm,workdir ):
     e = time.perf_counter ()
 
     if rank==0 :
+        #np.savez(f'{workdir}/test/euclidean_evecs.npz', distance= E ) 
         assert np.allclose(np.load(f'{workdir}/test/euclidean_evecs.npz' )['distance']  ,E  )
         #pl.imshow(E);pl.colorbar();pl.show()
         print(f"build_distance_matrix_from_eigenvectors, execution time {e-s }sec")
