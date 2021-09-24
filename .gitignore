@@ -4,7 +4,6 @@ doc/*
 *.pdf
 .ipynb_checkpoints/
 *.npy
-*.ipynb
 test/*
 
 
