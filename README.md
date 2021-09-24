@@ -1,5 +1,3 @@
-readme
-
 # ForeGroundCluster
 
 FGCluster is a python package aimed at running spectral clustering onto Healpix maps.
@@ -36,4 +34,4 @@ Notice that the whole package is implemented to work in parallel with `mpi4py`. 
 
 ## Tutorial Script
 
-To learn how to use `FGCluster` we provided a tutorial notebook, available at
+To learn how to use `FGCluster` we provided a tutorial notebook, available at [this link](https://github.com/giuspugl/fgcluster/blob/master/Tutorial.ipynb)
