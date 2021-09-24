@@ -1,3 +1,14 @@
+#
+#   spectral_clustering_mpi.py
+#   module encoding the spectral clustering.
+#
+#   date: 2021-09-21
+#   author: GIUSEPPE PUGLISI
+#
+#   Copyright (C) 2021  Giuseppe Puglisi
+#
+
+
 import healpy as hp
 import pylab as pl
 import numpy as np

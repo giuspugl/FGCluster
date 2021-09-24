@@ -1,3 +1,14 @@
+#
+#   utils.py
+#   module encoding the auxiliary functions for FGCluster.
+#
+#   date: 2021-09-21
+#   author: GIUSEPPE PUGLISI
+#
+#   Copyright (C) 2021  Giuseppe Puglisi
+#
+
+
 import warnings
 import pylab as pl
 import healpy as hp
