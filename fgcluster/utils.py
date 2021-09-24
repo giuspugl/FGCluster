@@ -6,8 +6,6 @@ import astropy.units as u
 import numpy as np
 
 
-
-
 def plotclusters(labels, imap):
     outm = pl.zeros_like(imap)
     for i in range(labels.max() + 1):
@@ -17,23 +15,23 @@ def plotclusters(labels, imap):
     return outm
 
 
-def check_nside(nsideout, mapin, verbose=False ):
+def check_nside(nsideout, mapin, verbose=False):
     nside2 = hp.get_nside(mapin)
-    if nside2 != nsideout :
-        if verbose : print("running ud_grade ")
+    if nside2 != nsideout:
+        if verbose:
+            print("running ud_grade ")
         return hp.ud_grade(nside_out=nsideout, map_in=mapin)
     else:
         return mapin
 
 
-
-def get_scatter_info( N, nprocs):
+def get_scatter_info(N, nprocs):
     """
     Split input array with size `N` by the number of processes `nprocs`.
     """
-    datatoscatter = np.zeros((N,N))
+    datatoscatter = np.zeros((N, N))
     split = np.array_split(datatoscatter, nprocs, axis=0)
-    split_sizes =  np.array ([  split[i].shape[0 ] for i in range(nprocs )], dtype='int' )
+    split_sizes = np.array([split[i].shape[0] for i in range(nprocs)], dtype="int")
 
     split_sizes_in = split_sizes * N
     offset_in = np.insert(np.cumsum(split_sizes_in), 0, 0)[0:-1]
@@ -41,7 +39,7 @@ def get_scatter_info( N, nprocs):
     return offset_in, split_sizes
 
 
-def extend_matrix(mask ,compressed_matr , fill_value=0   ):
+def extend_matrix(mask, compressed_matr, fill_value=0):
     """
     Given a compressed affinity matrix (evaluated outside a masked region defined by mask)
     we expand into a Npix X Npix affinity matrix  with non zero elements mapped consistently
@@ -59,14 +57,13 @@ def extend_matrix(mask ,compressed_matr , fill_value=0   ):
         matrix _expanded_ with full size with all the pixels encoded in a Healpix map.
         Matrix elements in the masked area are set to zero by default.(see `fill_value`)
     """
-    Npix = hp.nside2npix(hp.get_nside(mask) )
-    mask= np.expand_dims(mask,axis=1)
+    Npix = hp.nside2npix(hp.get_nside(mask))
+    mask = np.expand_dims(mask, axis=1)
     mask2d = np.bool_(mask.dot(mask.T))
 
-
-    expanded_matr =np.zeros((Npix,Npix ))
-    expanded_matr [mask2d ]= compressed_matr.flatten()
-    expanded_matr [~mask2d ]=  fill_value
+    expanded_matr = np.zeros((Npix, Npix))
+    expanded_matr[mask2d] = compressed_matr.flatten()
+    expanded_matr[~mask2d] = fill_value
     return expanded_matr
 
 
@@ -101,14 +98,12 @@ def get_under_over_partition_measures(K, labels, W):
     return under, over
 
 
-
 def minmaxrescale(x, a=0, b=1):
     """
     Performs  a MinMax Rescaling on an array `x` to a generic range :math:`[a,b]`.
     """
     xresc = (b - a) * (x - x.min()) / (x.max() - x.min()) + a
     return xresc
-
 
 
 def get_lmax(nside, stop_threshold):
@@ -128,7 +123,6 @@ def get_lmax(nside, stop_threshold):
     return lmax, sigmabeam
 
 
-
 def get_neighbours(ipix, nside, order):
     """
     Given a pixel index in the Healpix pixelization and the nside parameter, estimated
@@ -141,7 +135,6 @@ def get_neighbours(ipix, nside, order):
     else:
         ipix = np.unique(hp.get_all_neighbours(theta=ipix, nside=nside))
         return get_neighbours(ipix, nside, order - 1)
-
 
 
 def split_data_among_processors(size, rank, nprocs):
@@ -160,7 +153,6 @@ def split_data_among_processors(size, rank, nprocs):
         start = np.int_(rank * localsize + remainder)
         stop = np.int_(start + (localsize))
     return start, stop
-
 
 
 def from_ell_to_index(ell):

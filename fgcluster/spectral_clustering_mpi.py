@@ -6,15 +6,19 @@ from scipy.stats import norm, ks_2samp
 from scipy import sparse
 from scipy.special import legendre
 from sklearn.metrics import pairwise_distances
-from .utils  import ( get_lmax, get_neighbours,
-                    split_data_among_processors, minmaxrescale,
-                    from_ell_to_index,from_index_to_ell )
+from .utils import (
+    get_lmax,
+    get_neighbours,
+    split_data_among_processors,
+    minmaxrescale,
+    from_ell_to_index,
+    from_index_to_ell,
+)
 from mpi4py import MPI
 
 import warnings
 
 warnings.filterwarnings("ignore")
-
 
 
 def kolmogorov_smirnov_distance(x, y, ntests, nsamp):
@@ -29,7 +33,7 @@ def kolmogorov_smirnov_distance(x, y, ntests, nsamp):
     sigma2 = y[1]
     D = []
     # We  repeat the KS test ntest times (it takes time) on two samples with same size n=m
-    #np.random.seed(1234)
+    # np.random.seed(1234)
 
     for test in range(ntests):
         rvs1 = norm.rvs(size=nsamp, loc=mu1, scale=sigma1)
@@ -40,8 +44,6 @@ def kolmogorov_smirnov_distance(x, y, ntests, nsamp):
     return med
 
 
-
-
 def heat_kernel(Theta, l, sigma):
     """
     Returns the functional Heat kernel given the cosine matrix `Theta` at a given `l`
@@ -50,7 +52,9 @@ def heat_kernel(Theta, l, sigma):
     return (2 * l + 1) / 4.0 / np.pi * np.exp(-sigma * l * (l + 1)) * legendre(l)(Theta)
 
 
-def build_adjacency_from_heat_kernel_gather(nside, comm, stopping_threshold=1e-7, KS_weighted=False, Q=None, alpha=0.5):
+def build_adjacency_from_heat_kernel_gather(
+    nside, comm, stopping_threshold=1e-7, KS_weighted=False, Q=None, alpha=0.5
+):
     """
     Estimate the Adjacency matrix in parallel from the Heat kernel.
 
@@ -86,11 +90,11 @@ def build_adjacency_from_heat_kernel_gather(nside, comm, stopping_threshold=1e-7
         scalprod = np.cos(Psi)
 
     lmax, sigmabeam = get_lmax(nside, stopping_threshold)
-    start_row, end_row = split_data_among_processors(size=npix, rank=rank, nprocs=nprocs )
-    # Create loc array on each core
-    Gloc = np.zeros(
-        (end_row-start_row , npix ), dtype=np.float_
+    start_row, end_row = split_data_among_processors(
+        size=npix, rank=rank, nprocs=nprocs
     )
+    # Create loc array on each core
+    Gloc = np.zeros((end_row - start_row, npix), dtype=np.float_)
     offset_hpx = start_row
     for l in np.arange(lmax):
         Gloc += heat_kernel(
@@ -101,7 +105,10 @@ def build_adjacency_from_heat_kernel_gather(nside, comm, stopping_threshold=1e-7
     G = np.concatenate(G).reshape((npix, npix))
     return G
 
-def build_adjacency_from_KS_distance_gather(nside, comm, X, sigmaX, ntests=50, nresample=100):
+
+def build_adjacency_from_KS_distance_gather(
+    nside, comm, X, sigmaX, ntests=50, nresample=100
+):
     """
     Build the adjacency matrix  given the Kolmogorov Smirnov (KS) distance.
     /!\ This is one of the most computationally expensive routine in the whole package.
@@ -128,11 +135,13 @@ def build_adjacency_from_KS_distance_gather(nside, comm, X, sigmaX, ntests=50, n
         rank = comm.Get_rank()
         nprocs = comm.Get_size()
 
-    #npix = hp.nside2npix(nside)
+    # npix = hp.nside2npix(nside)
     npix = X.size
-    start_row, end_row = split_data_among_processors(size=npix, rank=rank, nprocs=nprocs )
+    start_row, end_row = split_data_among_processors(
+        size=npix, rank=rank, nprocs=nprocs
+    )
     Qloc = np.zeros(
-        (end_row-start_row , npix ), dtype=np.float_
+        (end_row - start_row, npix), dtype=np.float_
     )  # Create Qloc array on each core
     offset_hpx = start_row
     for i in range(Qloc.shape[0]):
@@ -151,10 +160,7 @@ def build_adjacency_from_KS_distance_gather(nside, comm, X, sigmaX, ntests=50, n
     return minmaxrescale(Q, a=0, b=1)
 
 
-def build_adjacency_from_nearest_neighbours(
-    nside,
-    comm,
-    neighbour_order=1):
+def build_adjacency_from_nearest_neighbours(nside, comm, neighbour_order=1):
 
     """
     Estimate the Adjacency matrix in parallel from the Nearest neighbour pixels.
@@ -190,10 +196,7 @@ def build_adjacency_from_nearest_neighbours(
     D = np.zeros_like(Dloc)
     comm.Allreduce(Dloc, D, op=MPI.SUM)
 
-
     return D
-
-
 
 
 def estimate_Laplacian_matrix(W, kind="unnormalized"):
@@ -247,7 +250,6 @@ def estimate_Ritz_eigenpairs(L, n_eig, tolerance=1e-12):
     return eval, evec
 
 
-
 def build_distance_matrix_from_eigenvectors(W, comm):
     """
     Estimate the Euclidean distance from the matrix built from the
@@ -259,32 +261,31 @@ def build_distance_matrix_from_eigenvectors(W, comm):
     npix = W.shape[0]
     Indices = np.array(np.triu_indices(npix, 1))
     # assigning a symmetric matrix values in mpi
-    #globalsize = Indices.shape[1]
-    #start, stop = split_data_among_processors(size=globalsize, rank=rank, nprocs=nprocs)
+    # globalsize = Indices.shape[1]
+    # start, stop = split_data_among_processors(size=globalsize, rank=rank, nprocs=nprocs)
     start, stop = split_data_among_processors(size=npix, rank=rank, nprocs=nprocs)
     Dloc = np.zeros((npix, npix))
-    for i  in range(start,stop  ):
-        i_indx =np.ma.masked_equal(Indices[0],i ) .mask
-        j_indx =Indices[1][i_indx]
+    for i in range(start, stop):
+        i_indx = np.ma.masked_equal(Indices[0], i).mask
+        j_indx = Indices[1][i_indx]
         # the euclidean distance is estimated considering npix samples of m features
         # (each row of W  is an  m-dimensional (m being the number  of columns of W)
         try:
-            Dloc[i, j_indx] = np.linalg.norm(W[i, :]- W[j_indx, :], axis=1)
+            Dloc[i, j_indx] = np.linalg.norm(W[i, :] - W[j_indx, :], axis=1)
             Dloc[j_indx, i] = Dloc[i, j_indx]
         except ValueError:
-            #this exception is to avoid the ValueError raising
+            # this exception is to avoid the ValueError raising
             # when there ain't no j-elements in correspondence of the
             # last row
-            Dloc[i,i]=0.
+            Dloc[i, i] = 0.0
 
     Dloc = comm.allreduce(Dloc, op=MPI.SUM)
     return Dloc
 
 
-
-
-def build_adjacency_from_KS_distance_nearest_neighbours(nside, comm, X, sigmaX,
-                        order_nn, ntests=50, nresample=100):
+def build_adjacency_from_KS_distance_nearest_neighbours(
+    nside, comm, X, sigmaX, order_nn, ntests=50, nresample=100
+):
 
     """
     Build the adjacency matrix  given the Kolmogorov Smirnov (KS) distance.
@@ -315,22 +316,24 @@ def build_adjacency_from_KS_distance_nearest_neighbours(nside, comm, X, sigmaX,
         rank = comm.Get_rank()
         nprocs = comm.Get_size()
     npix = hp.nside2npix(nside)
-    Indices = (np.triu_indices(npix, 1))
+    Indices = np.triu_indices(npix, 1)
     Qloc = np.zeros(npix * npix)
     start, stop = split_data_among_processors(
-            size=Indices[0].size, rank=rank, nprocs=nprocs
-        )
+        size=Indices[0].size, rank=rank, nprocs=nprocs
+    )
 
-    for i in range(start,stop ):
-        i_indx =np.ma.masked_equal(Indices[0],i ) .mask
-        j_indx =Indices[1][i_indx]
-        listpix = get_neighbours(ipix=i,nside=nside,order=order_nn)
-        intersect = np.intersect1d(j_indx, listpix )
-        for j in intersect :
+    for i in range(start, stop):
+        i_indx = np.ma.masked_equal(Indices[0], i).mask
+        j_indx = Indices[1][i_indx]
+        listpix = get_neighbours(ipix=i, nside=nside, order=order_nn)
+        intersect = np.intersect1d(j_indx, listpix)
+        for j in intersect:
 
             X_i = (X[i], sigmaX[i])
             X_j = (X[j], sigmaX[j])
-            q = kolmogorov_smirnov_distance(x=X_i, y=X_j, ntests=ntests, nsamp=nresample)
+            q = kolmogorov_smirnov_distance(
+                x=X_i, y=X_j, ntests=ntests, nsamp=nresample
+            )
             Qloc[i * npix + j] = q
             Qloc[j * npix + i] = q
 
