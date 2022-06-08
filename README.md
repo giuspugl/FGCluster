@@ -38,7 +38,7 @@ To learn how to use `FGCluster` we provided a tutorial notebook, available at [t
 
 ## Maps of Cluster
 Maps of Clusters are published through `Dataverse` :
-- PySM parameters : https://dataverse.harvard.edu/dataset.xhtml?persistentId=doi:10.7910/DVN/WJUEFA&version=DRAFT
+- PySM parameters :https://dataverse.harvard.edu/dataset.xhtml?persistentId=doi:10.7910/DVN/WJUEFA
 - Nclouds : https://dataverse.harvard.edu/dataset.xhtml?persistentId=doi:10.7910/DVN/XAMJ4X
 - GNILC dust parameters: https://dataverse.harvard.edu/dataset.xhtml?persistentId=doi:10.7910/DVN/02SCHB
-https://dataverse.harvard.edu/dataset.xhtml?persistentId=doi:10.7910/DVN/WJUEFA&version=DRAFT
+ 
