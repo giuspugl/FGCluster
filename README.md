@@ -35,3 +35,10 @@ Notice that the whole package is implemented to work in parallel with `mpi4py`. 
 ## Tutorial Script
 
 To learn how to use `FGCluster` we provided a tutorial notebook, available at [this link](https://github.com/giuspugl/fgcluster/blob/master/Tutorial.ipynb)
+
+## Maps of Cluster
+Maps of Clusters are published through `Dataverse` :
+- PySM parameters : https://dataverse.harvard.edu/dataset.xhtml?persistentId=doi:10.7910/DVN/WJUEFA&version=DRAFT
+- Nclouds : https://dataverse.harvard.edu/dataset.xhtml?persistentId=doi:10.7910/DVN/XAMJ4X
+- GNILC dust parameters: https://dataverse.harvard.edu/dataset.xhtml?persistentId=doi:10.7910/DVN/02SCHB
+https://dataverse.harvard.edu/dataset.xhtml?persistentId=doi:10.7910/DVN/WJUEFA&version=DRAFT
