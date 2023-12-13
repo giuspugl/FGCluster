@@ -5,7 +5,7 @@ doc/*
 .ipynb_checkpoints/
 *.npy
 test/*
-
+.DS_STORE
 
 #Distribution / packaging
 .Python

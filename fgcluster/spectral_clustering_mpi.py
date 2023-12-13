@@ -112,8 +112,9 @@ def build_adjacency_from_heat_kernel_gather(
             scalprod[offset_hpx : offset_hpx + Gloc.shape[0], :], l, sigmabeam
         )
     comm.Barrier()
-    G = comm.allgather(Gloc)
-    G = np.concatenate(G).reshape((npix, npix))
+    G= np.zeros(npix*npix)
+    comm.Allgather(Gloc,G)
+    G = (G).reshape((npix, npix))
     return G
 
 
@@ -165,8 +166,9 @@ def build_adjacency_from_KS_distance_gather(
             Qloc[i, j] = q
 
     comm.Barrier()
-    Q = comm.allgather(Qloc)
-    Q = np.concatenate(Q).reshape((npix, npix))
+    Q=np.zeros(npix*npix)
+    comm.Allgather(Qloc, Q)
+    Q = (Q).reshape((npix, npix))
     Q[np.diag_indices(npix)] = 0.0
     return minmaxrescale(Q, a=0, b=1)
 
@@ -289,9 +291,9 @@ def build_distance_matrix_from_eigenvectors(W, comm):
             # when there ain't no j-elements in correspondence of the
             # last row
             Dloc[i, i] = 0.0
-
-    Dloc = comm.allreduce(Dloc, op=MPI.SUM)
-    return Dloc
+    Dout = np.zeros_like(Dloc )
+    comm.Allreduce(Dloc,Dout , op=MPI.SUM)
+    return Dout
 
 
 def build_adjacency_from_KS_distance_nearest_neighbours(
@@ -347,7 +349,7 @@ def build_adjacency_from_KS_distance_nearest_neighbours(
             )
             Qloc[i * npix + j] = q
             Qloc[j * npix + i] = q
-
-    Qloc = comm.allreduce(Qloc, op=MPI.SUM)
-    Qloc = Qloc.reshape((npix, npix))
-    return minmaxrescale(Qloc, a=0, b=1)
+    Qout= np.zeros_like(Qloc)
+    comm.Allreduce(Qloc, Qout, op=MPI.SUM)
+    Qout= Qout.reshape((npix,npix))
+    return minmaxrescale(Qout , a=0, b=1)
