@@ -181,3 +181,21 @@ def from_index_to_ell(index):
     """
     ell = np.floor(np.sqrt(index))
     return ell
+
+
+def mappify (arr, nside, pixs  ) : 
+
+    """
+    map out a row or column of affinity matrices into a healpix map 
+    
+    - arr:{ array float}
+      the array to be mapped out
+    - nside 
+    - pixs :{array int} 
+      the list of pixels corresponding to the patch considered
+    """
+
+    mapout= pl.zeros (hp.nside2npix(nside )) 
+    mapout= hp.reorder(mapout, r2n=True )
+    mapout[pixs]= arr 
+    return mapout 

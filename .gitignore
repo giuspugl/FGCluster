@@ -6,7 +6,7 @@ doc/*
 *.npy
 test/*
 .DS_STORE
-
+.vscode
 #Distribution / packaging
 .Python
 env/
