@@ -126,9 +126,7 @@ def get_lmax(nside, stop_threshold):
     pixscale = hp.nside2resol(nside=nside)
     sigmabeam = (pixscale) / pl.sqrt(8 * np.log(2))
     ell = np.arange(3 * nside - 1)
-    arr = np.array(
-        [(2 * l + 1) / 4.0 / np.pi * np.exp(-sigmabeam * l * (l + 1)) for l in ell]
-    )
+    arr = (2 * ell + 1) / 4.0 / np.pi * np.exp(-sigmabeam * ell * (ell + 1))
     lmax = np.argmin(np.fabs(arr - stop_threshold))
 
     return lmax, sigmabeam
@@ -171,7 +169,7 @@ def from_ell_to_index(ell):
     Returns the range of column values assuming  a matrix with columns ordered
     with the m multipole , m ranging from -ell to +ell
     """
-    return ell ** 2, ell ** 2 + 2 * ell + 1
+    return ell**2, ell**2 + 2 * ell + 1
 
 
 def from_index_to_ell(index):
@@ -183,19 +181,18 @@ def from_index_to_ell(index):
     return ell
 
 
-def mappify (arr, nside, pixs  ) : 
-
+def mappify(arr, nside, pixs):
     """
-    map out a row or column of affinity matrices into a healpix map 
-    
+    map out a row or column of affinity matrices into a healpix map
+
     - arr:{ array float}
       the array to be mapped out
-    - nside 
-    - pixs :{array int} 
+    - nside
+    - pixs :{array int}
       the list of pixels corresponding to the patch considered
     """
 
-    mapout= pl.zeros (hp.nside2npix(nside )) 
-    mapout= hp.reorder(mapout, r2n=True )
-    mapout[pixs]= arr 
-    return mapout 
+    mapout = pl.zeros(hp.nside2npix(nside))
+    mapout = hp.reorder(mapout, r2n=True)
+    mapout[pixs] = arr
+    return mapout

@@ -112,8 +112,8 @@ def build_adjacency_from_heat_kernel_gather(
             scalprod[offset_hpx : offset_hpx + Gloc.shape[0], :], l, sigmabeam
         )
     comm.Barrier()
-    G= np.zeros(npix*npix)
-    comm.Allgather(Gloc,G)
+    G = np.zeros(npix * npix)
+    comm.Allgather(Gloc, G)
     G = (G).reshape((npix, npix))
     return G
 
@@ -166,7 +166,7 @@ def build_adjacency_from_KS_distance_gather(
             Qloc[i, j] = q
 
     comm.Barrier()
-    Q=np.zeros(npix*npix)
+    Q = np.zeros(npix * npix)
     comm.Allgather(Qloc, Q)
     Q = (Q).reshape((npix, npix))
     Q[np.diag_indices(npix)] = 0.0
@@ -174,7 +174,6 @@ def build_adjacency_from_KS_distance_gather(
 
 
 def build_adjacency_from_nearest_neighbours(nside, comm, neighbour_order=1):
-
     """
     Estimate the Adjacency matrix in parallel from the Nearest neighbour pixels.
 
@@ -291,15 +290,14 @@ def build_distance_matrix_from_eigenvectors(W, comm):
             # when there ain't no j-elements in correspondence of the
             # last row
             Dloc[i, i] = 0.0
-    Dout = np.zeros_like(Dloc )
-    comm.Allreduce(Dloc,Dout , op=MPI.SUM)
+    Dout = np.zeros_like(Dloc)
+    comm.Allreduce(Dloc, Dout, op=MPI.SUM)
     return Dout
 
 
 def build_adjacency_from_KS_distance_nearest_neighbours(
     nside, comm, X, sigmaX, order_nn, ntests=50, nresample=100
 ):
-
     """
     Build the adjacency matrix  given the Kolmogorov Smirnov (KS) distance.
     With respect to `build_adjacency_from_KS_distance`, we build it by restricting the
@@ -349,7 +347,7 @@ def build_adjacency_from_KS_distance_nearest_neighbours(
             )
             Qloc[i * npix + j] = q
             Qloc[j * npix + i] = q
-    Qout= np.zeros_like(Qloc)
+    Qout = np.zeros_like(Qloc)
     comm.Allreduce(Qloc, Qout, op=MPI.SUM)
-    Qout= Qout.reshape((npix,npix))
-    return minmaxrescale(Qout , a=0, b=1)
+    Qout = Qout.reshape((npix, npix))
+    return minmaxrescale(Qout, a=0, b=1)
