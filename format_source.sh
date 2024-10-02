@@ -19,9 +19,10 @@ fi
 blkrun="-l 88"
 
 # Directories to process
-pydirs="fgcluster"
+declare -a pydirs=("fgcluster" "scripts")
 
-for pyd in ${pydirs}; do
+for pyd in ${pydirs[@]}; do
+    echo "${base}/${pyd}"
     find "${base}/${pyd}" \
     -name "*.py" \
     -not -path '*versioneer*' \
